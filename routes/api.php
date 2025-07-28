@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FacturaController;
+use App\Http\Controllers\ContactoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -32,3 +33,5 @@ Route::get('/mis-lotes/{email}', [FacturaController::class, 'getLotesPorEmail'])
 Route::post('/update-email-lote', [FacturaController::class, 'updateEmailLote']);
 Route::post('/create-user', [FacturaController::class, 'createUserIfNotExists']);
 Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmail']);
+Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
+Route::post('/enviar-contacto', [ContactoController::class, 'enviar']);

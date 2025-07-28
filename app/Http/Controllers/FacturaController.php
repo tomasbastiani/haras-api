@@ -134,11 +134,15 @@ class FacturaController extends Controller
 
     public function getLotesPorEmail($email)
     {
-        $lotes = DB::table('gastoscomunes')
+        $query = DB::table('gastoscomunes')
             ->select('email', 'nlote')
-            ->where('email', $email)
-            ->distinct()
-            ->get();
+            ->distinct();
+
+        if ($email !== 'admin@hsm.com') {
+            $query->where('email', $email);
+        }
+
+        $lotes = $query->get();
 
         return response()->json($lotes);
     }
@@ -193,6 +197,20 @@ class FacturaController extends Controller
         $exists = DB::table('users')->where('email', $email)->exists();
 
         return response()->json(['exists' => $exists]);
+    }
+
+    public function obtenerEmailsPorLote()
+    {
+        try {
+            $resultados = DB::table('gastoscomunes')
+                ->select('email', 'nlote')
+                ->distinct()
+                ->get();
+
+            return response()->json($resultados);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Error al obtener los datos: ' . $e->getMessage()], 500);
+        }
     }
 
     

@@ -142,7 +142,9 @@ class FacturaController extends Controller
             $query->where('email', $email);
         }
 
-        $lotes = $query->get();
+        $lotes = $query
+            ->orderByRaw('CAST(nlote AS UNSIGNED) ASC')
+            ->get();
 
         return response()->json($lotes);
     }
@@ -205,6 +207,7 @@ class FacturaController extends Controller
             $resultados = DB::table('gastoscomunes')
                 ->select('email', 'nlote')
                 ->distinct()
+                ->orderByRaw('CAST(nlote AS UNSIGNED) ASC')
                 ->get();
 
             return response()->json($resultados);
@@ -212,6 +215,38 @@ class FacturaController extends Controller
             return response()->json(['error' => 'Error al obtener los datos: ' . $e->getMessage()], 500);
         }
     }
+
+    public function getLotesPorUser($email)
+    {
+        try {
+            $lotes = DB::table('gastoscomunes')
+                ->select('nlote')
+                ->where('email', $email)
+                ->distinct()
+                ->orderByRaw('CAST(nlote AS UNSIGNED) ASC')
+                ->get();
+
+            return response()->json($lotes);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function getCartas()
+    {
+        try {
+            $cartas = DB::table('gastoscomunes')
+                ->select('numero')
+                ->distinct()
+                ->orderByRaw('CAST(numero AS UNSIGNED) ASC')
+                ->get();
+
+            return response()->json($cartas);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
 
     
 }

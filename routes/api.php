@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FacturaController;
 use App\Http\Controllers\ContactoController;
+use App\Http\Controllers\ArchivoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,3 +36,13 @@ Route::post('/create-user', [FacturaController::class, 'createUserIfNotExists'])
 Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmail']);
 Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
 Route::post('/enviar-contacto', [ContactoController::class, 'enviar']);
+
+Route::get('/lotes-por-user/{email}', [FacturaController::class, 'getLotesPorUser']);
+Route::get('/cartas', [FacturaController::class, 'getCartas']);
+
+// CRUD Archivos
+Route::post('/archivos', [ArchivoController::class, 'store']);
+Route::get('/archivos', [ArchivoController::class, 'index']);
+Route::delete('/archivos/{id}', [ArchivoController::class, 'destroy']);
+Route::get('/archivos/{id}/download', [ArchivoController::class, 'download']);
+Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);

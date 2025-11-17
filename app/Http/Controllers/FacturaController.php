@@ -167,6 +167,35 @@ class FacturaController extends Controller
         }
     }
 
+    // public function createUserIfNotExists(Request $request)
+    // {
+    //     $request->validate([
+    //         'email' => 'required|email',
+    //         'password' => 'required|string|min:4'
+    //     ]);
+
+    //     $exists = DB::table('users')->where('email', $request->email)->exists();
+
+    //     Log::info('exists', array($exists));
+
+    //     if ($exists) {
+    //         return response()->json(['success' => false, 'message' => 'El usuario ya existe.'], 400);
+    //     }
+
+    //     try {
+    //         DB::table('users')->insert([
+    //             'email' => $request->email,
+    //             'password' => $request->password,
+    //             'created_at' => now(),
+    //             'updated_at' => now()
+    //         ]);
+
+    //         return response()->json(['success' => true]);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['success' => false, 'message' => 'Error al crear el usuario.'], 500);
+    //     }
+    // }
+
     public function createUserIfNotExists(Request $request)
     {
         $request->validate([
@@ -182,15 +211,26 @@ class FacturaController extends Controller
 
         try {
             DB::table('users')->insert([
+                'nombre' => $request->nombre,
                 'email' => $request->email,
-                'password' => $request->password, // ⚠️ en texto plano, como pediste
+                'password' => $request->password,
+                'admin' => 0,
                 'created_at' => now(),
                 'updated_at' => now()
             ]);
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => 'Error al crear el usuario.'], 500);
+            Log::error('Error al crear usuario', [
+                'message' => $e->getMessage(),
+                'code'    => $e->getCode(),
+                'trace'   => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al crear el usuario.'
+            ], 500);
         }
     }
 

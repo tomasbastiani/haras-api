@@ -26,7 +26,7 @@ class GastosComunesDisponiblesNotification extends Notification
     public function toMail($notifiable): MailMessage
     {
         // URL al login
-        $loginUrl = 'https://harassantamaria.com.ar/login';
+        $loginUrl = 'https://harassantamaria.com.ar/test/login';
 
         // Nombre (columna `nombre` de tu modelo User)
         $nombre = $notifiable->nombre ?? 'vecino';

@@ -6,6 +6,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FacturaController;
 use App\Http\Controllers\ContactoController;
 use App\Http\Controllers\ArchivoController;
+use App\Http\Controllers\GastosNotificacionesController;
 
 /*
 |--------------------------------------------------------------------------
@@ -46,3 +47,7 @@ Route::get('/archivos', [ArchivoController::class, 'index']);
 Route::delete('/archivos/{id}', [ArchivoController::class, 'destroy']);
 Route::get('/archivos/{id}/download', [ArchivoController::class, 'download']);
 Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
+
+
+Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
+

@@ -78,12 +78,17 @@ class ArchivoController extends Controller
         return Storage::disk('public')->download($filePath, $a->file_name);
     }
 
-    public function indexByUser($user)
+    public function indexByUser(Request $request, $user)
     {
-        $archivos = DB::table('archivos')
-            ->where('user', $user)
-            ->orderBy('created_at', 'desc')
-            ->get();
+        $query = DB::table('archivos')
+            ->orderBy('created_at', 'desc');
+
+        // Si NO es admin, filtramos por usuario
+        if (! $request->boolean('is_admin')) {
+            $query->where('user', $user);
+        }
+
+        $archivos = $query->get();
 
         return response()->json($archivos);
     }

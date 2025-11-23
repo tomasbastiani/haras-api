@@ -70,8 +70,8 @@ class FacturaController extends Controller
             ])->exists();
 
             if (!$existe) {
-                $carta = "https://harassantamaria.com.ar/gcomunes/$numero/cartas/L-$nlote.pdf";
-                $gastocomun = "https://harassantamaria.com.ar/gcomunes/$numero/{$numero}%20Liquidacion%20de%20Gastos%20Comunes.pdf";
+                $carta = "https://harassantamaria.com.ar/gcomunes/$numero/Cartas/L-$nlote.pdf";
+                $gastocomun = "https://harassantamaria.com.ar/gcomunes/$numero/LiqGastosComunes{$numero}.pdf";
 
                 $insertData[] = [
                     'email' => $usuario->email,

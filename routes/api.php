@@ -36,6 +36,7 @@ Route::post('/update-email-lote', [FacturaController::class, 'updateEmailLote'])
 Route::post('/create-user', [FacturaController::class, 'createUserIfNotExists']);
 Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmail']);
 Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
+Route::get('/gastos/pdf/{numero}/{nlote}', [FacturaController::class, 'verPDF']);
 Route::post('/enviar-contacto', [ContactoController::class, 'enviar']);
 
 Route::get('/lotes-por-user/{email}', [FacturaController::class, 'getLotesPorUser']);

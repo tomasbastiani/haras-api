@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FacturaController extends Controller
 {
@@ -287,6 +288,116 @@ class FacturaController extends Controller
         }
     }
 
+    // public function verPDF(Request $request, $numero, $nlote)
+    // {
+    //     $email = $request->query('email');
+    //     $tipo = $request->query('tipo'); // carta | liquidacion
 
-    
+    //     if (!$email) {
+    //         return response()->json(['message' => 'No autorizado'], 401);
+    //     }
+
+    //     // 1) Validar que el usuario es dueño de ese lote+periodo
+    //     $registro = DB::connection('hsm')
+    //         ->table('gastoscomunes')
+    //         ->where('email', $email)
+    //         ->where('nlote', $nlote)
+    //         ->where('numero', $numero)
+    //         ->first();
+    //     Log::info('$registro', array($registro));
+    //     if (!$registro) {
+    //         return response()->json(['message' => 'No autorizado'], 403);
+    //     }
+
+    //     // 2) Construir el path físico del archivo
+    //     $base = '/home/bastiani/domains/harassantamaria.com.ar/public_html/gcomunes';
+    //     // $base = rtrim(env('GCOMUNES_BASE_PATH'), '/');
+
+    //     if ($tipo === 'carta') {
+    //         $filePath = "{$base}/{$numero}/Cartas/L-{$nlote}.pdf";
+    //     } else {
+    //         $filePath = "{$base}/{$numero}/LiqGastosComunes{$numero}.pdf";
+    //     }
+    //     Log::info('$filePath', array($filePath));
+    //     if (!file_exists($filePath)) {
+    //         return response()->json(['message' => 'Archivo no encontrado'], 404);
+    //     }
+
+    //     return response()->file($filePath);
+    // }
+
+
+    public function verPDF(Request $request, $numero, $nlote)
+    {
+        $email = $request->query('email');
+        $tipo  = $request->query('tipo'); // 'carta' | 'liquidacion'
+
+        if (!$email) {
+            return response()->json(['message' => 'No autorizado'], 401);
+        }
+
+        // 1) Validar que el usuario es dueño de ese lote+período
+        $registro = DB::connection('hsm')
+            ->table('gastoscomunes')
+            ->where('email', $email)
+            ->where('nlote', $nlote)
+            ->where('numero', $numero)
+            ->first();
+
+        if (!$registro) {
+            return response()->json(['message' => 'No autorizado'], 403);
+        }
+
+        // 2) Tomar la URL del PDF desde la BD
+        if ($tipo === 'carta') {
+            $urlArchivo = $registro->carta;
+        } else {
+            $urlArchivo = $registro->gastocomun;
+        }
+
+        if (empty($urlArchivo)) {
+            return response()->json(['message' => 'URL no encontrada en la BD'], 404);
+        }
+
+        Log::info('$urlArchivo', ['url' => $urlArchivo]);
+
+        // 3) Descargar el PDF vía HTTP y hacer de "proxy"
+        try {
+            $context = stream_context_create([
+                'http' => [
+                    'method'  => 'GET',
+                    'timeout' => 10,
+                ],
+            ]);
+
+            $fh = @fopen($urlArchivo, 'rb', false, $context);
+
+            if (! $fh) {
+                Log::error('No se pudo abrir el PDF vía HTTP', ['url' => $urlArchivo]);
+                return response()->json(['message' => 'No se pudo abrir el PDF'], 404);
+            }
+
+            $filename = ($tipo === 'carta')
+                ? "carta-{$numero}-lote-{$nlote}.pdf"
+                : "liquidacion-{$numero}-lote-{$nlote}.pdf";
+
+            return new StreamedResponse(function () use ($fh) {
+                fpassthru($fh);
+                fclose($fh);
+            }, 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('Error al obtener el PDF', [
+                'url'   => $urlArchivo,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Error al obtener el PDF'], 500);
+        }
+    }
+
+
 }

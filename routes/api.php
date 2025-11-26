@@ -7,6 +7,7 @@ use App\Http\Controllers\FacturaController;
 use App\Http\Controllers\ContactoController;
 use App\Http\Controllers\ArchivoController;
 use App\Http\Controllers\GastosNotificacionesController;
+use App\Http\Controllers\AdminMailController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,4 +52,6 @@ Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
 
 
 Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
+Route::post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
+
 

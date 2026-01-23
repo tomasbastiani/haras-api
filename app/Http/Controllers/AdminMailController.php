@@ -41,21 +41,17 @@ class AdminMailController extends Controller
 
                 // ===== 2) MOROSOS =====
                 $morosos = Moroso::where('email', $email)->get();
-
                 $lotesMorosos = $morosos->pluck('nlote')->unique()->toArray();
 
-                // Creamos un MAPA lote => monto
+                // Creamos un MAPA lote => monto (deuda)
                 $montosPorLote = [];
                 foreach ($morosos as $m) {
                     $montosPorLote[$m->nlote] = $m->monto;
                 }
 
-                // ===== 3) INFO PAGOS: CVU y ALIAS por lote =====
-                $nlotesParaPago = array_unique(array_merge($lotesNormales, $lotesMorosos));
+                // ===== 3) INFO PAGOS: CVU y ALIAS SOLO para lotes morosos =====
+                $infoPagos = InfoPago::whereIn('nlote', $lotesMorosos)->get();
 
-                $infoPagos = InfoPago::whereIn('nlote', $nlotesParaPago)->get();
-
-                // Creamos un MAPA lote => [cvu, alias]
                 $pagosPorLote = [];
                 foreach ($infoPagos as $ip) {
                     $pagosPorLote[$ip->nlote] = [
@@ -64,11 +60,17 @@ class AdminMailController extends Controller
                     ];
                 }
 
-                // ===== 4) Construcción del TEXTO unificado =====
+                // ===== 4) Construcción del TEXTO SOLO para lotes con deuda =====
                 $detallePorLote = [];
 
-                foreach ($nlotesParaPago as $nl) {
-                    $monto = $montosPorLote[$nl] ?? '';
+                foreach ($lotesMorosos as $nl) {
+                    $monto = $montosPorLote[$nl] ?? null;
+
+                    // Si querés asegurarte que no se muestren montos "vacíos" o 0:
+                    if (empty($monto) || (float)$monto == 0.0) {
+                        continue;
+                    }
+
                     $cvu   = $pagosPorLote[$nl]['cvu']   ?? '';
                     $alias = $pagosPorLote[$nl]['alias'] ?? '';
 

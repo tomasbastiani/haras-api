@@ -3,78 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <title>{{ $subject ?? 'Haras Santa María' }}</title>
+    <meta name="color-scheme" content="light dark">
+    <meta name="supported-color-schemes" content="light dark">
 </head>
-<body style="margin:0; padding:0; background-color:#f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
+<body style="margin:0; padding:0; background-color:#eef1f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;">
 
-    <!-- Fondo general -->
-    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eef1f4; padding:32px 0;">
         <tr>
-            <td align="center" style="padding: 30px 10px;">
-                <!-- Card principal -->
-                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="max-width: 600px; background-color:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.08);">
-                    
-                    <!-- Header con logo -->
+            <td align="center">
+
+                <!-- Tarjeta principal -->
+                <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:#ffffff; border-radius:14px; overflow:hidden; box-shadow:0 3px 14px rgba(0,0,0,0.08);">
+
+                    <!-- Logo centrado -->
                     <tr>
-                        <td style="background: linear-gradient(90deg, #004c6d, #0b7285); padding: 18px 24px; color:#ffffff;">
-                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                                <tr>
-                                    <td align="left" style="vertical-align: middle;">
-                                        <img src="https://harassantamaria.com.ar/img/hsm.png" alt="Haras Santa María" style="height: 42px; display:block; border:0; outline:none;">
-                                    </td>
-                                    <td align="right" style="vertical-align: middle; font-size:13px; opacity:0.9;">
-                                        <div style="font-weight:600; font-size:15px;">Haras Santa María</div>
-                                        <div style="margin-top:2px;">Administración de expensas</div>
-                                    </td>
-                                </tr>
-                            </table>
+                        <td align="center" style="padding:28px 24px 16px 24px;">
+                            <img src="https://harassantamaria.com.ar/test/icons/icon-512x512.png" alt="Haras Santa María" style="height:66px; display:block; border:0;">
                         </td>
                     </tr>
 
-                    <!-- Contenido principal -->
+                    <!-- Encabezado textual -->
                     <tr>
-                        <td style="padding: 24px 24px 16px 24px; color:#333333; font-size:14px; line-height:1.6;">
-                            {{-- Título del mail (asunto, por si el cliente no lo muestra grande) --}}
+                        <td align="center" style="padding:0 24px 24px 24px;">
+                            <div style="font-size:20px; font-weight:600; color:#0b7285; margin-bottom:4px;">
+                                Haras Santa María
+                            </div>
+                        </td>
+                    </tr>
+
+                    <!-- Contenido -->
+                    <tr>
+                        <td style="padding:0 24px 20px 24px; font-size:15px; color:#333; line-height:1.6;">
+
                             @if(!empty($subject))
-                                <h1 style="margin:0 0 16px 0; font-size:18px; font-weight:600; color:#222222;">
+                                <div style="font-size:18px; font-weight:600; color:#222; margin-bottom:14px;">
                                     {{ $subject }}
-                                </h1>
+                                </div>
                             @endif
 
-                            {{-- Contenido custom que arma el admin (con {lote}, {detalleDeudaxLote}, etc.) --}}
-                            <div style="font-size:14px; line-height:1.7; color:#333333;">
+                            <div style="font-size:15px; line-height:1.7; color:#333333;">
                                 {!! nl2br(e($bodyContent)) !!}
                             </div>
                         </td>
                     </tr>
 
-                    <!-- Línea separadora sutil -->
+                    <!-- Divider -->
                     <tr>
-                        <td style="padding: 0 24px;">
-                            <hr style="border:none; border-top:1px solid #eeeeee; margin:16px 0 12px 0;">
+                        <td style="padding:0 24px;">
+                            <hr style="border:none; border-top:1px solid #e9ecef; margin:16px 0 12px 0;">
                         </td>
                     </tr>
 
-                    <!-- Footer con info de contacto -->
+                    <!-- Footer de contacto -->
                     <tr>
-                        <td style="padding: 0 24px 20px 24px; font-size:12px; color:#777777; line-height:1.5;">
+                        <td style="padding:0 24px 24px 24px; font-size:13px; color:#6c757d; line-height:1.5;">
                             <p style="margin:0 0 6px 0;">
-                                Si tenés alguna consulta, podés comunicarte con la administración de Haras Santa María.
+                                Si tenés alguna consulta, podés comunicarte con la administración.
                             </p>
-                            <p style="margin:0;">
-                                <strong>Haras Santa María</strong>
+                            <p style="margin:0; font-weight:600; color:#0b7285;">
+                                Haras Santa María
                             </p>
                         </td>
                     </tr>
 
-                    <!-- Pie legal / disclaimer (opcional, dejé algo suave) -->
+                    <!-- Disclaimer -->
                     <tr>
-                        <td style="background-color:#f8f9fa; padding: 10px 24px 14px 24px; font-size:11px; color:#999999; text-align:center;">
-                            Este mensaje ha sido enviado de forma automática desde el sistema de administración de Haras Santa María.
+                        <td style="background-color:#f8f9fa; padding:12px 24px 14px 24px; font-size:11px; color:#999; text-align:center; line-height:1.5;">
+                            Este mensaje ha sido enviado automáticamente desde el sistema de administración de Haras Santa María.
                         </td>
                     </tr>
 
                 </table>
-                <!-- Fin Card principal -->
+                <!-- Fin tarjeta -->
             </td>
         </tr>
     </table>

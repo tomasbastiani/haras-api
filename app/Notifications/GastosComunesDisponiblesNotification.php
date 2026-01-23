@@ -32,7 +32,7 @@ class GastosComunesDisponiblesNotification extends Notification
         $nombre = $notifiable->nombre ?? 'vecino';
 
         // Logo público (asegurate de tener public/images/hsm.png)
-        $logoUrl = 'https://harassantamaria.com.ar/img/hsm.png';
+        $logoUrl = 'https://harassantamaria.com.ar/test/icons/icon-512x512.png';
 
         // Obtener lotes desde la tabla `gastoscomunes` por email
         $lotes = [];

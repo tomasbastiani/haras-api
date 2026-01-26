@@ -8,6 +8,7 @@ use App\Http\Controllers\ContactoController;
 use App\Http\Controllers\ArchivoController;
 use App\Http\Controllers\GastosNotificacionesController;
 use App\Http\Controllers\AdminMailController;
+use App\Http\Controllers\ForgotPasswordController;
 
 /*
 |--------------------------------------------------------------------------
@@ -54,4 +55,10 @@ Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
 Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
 Route::post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
 
+// Limitar un poco el spam en forgot
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('/password/forgot', [ForgotPasswordController::class, 'sendResetLink']);
+});
+
+Route::post('/password/reset', [ForgotPasswordController::class, 'resetPassword']);
 

@@ -20,7 +20,7 @@
                         @if(!empty($logoUrl))
                             <img src="{{ $logoUrl }}" alt="Haras Santa María" style="max-height:70px; display:block; border:0;">
                         @else
-                            <img src="https://harassantamaria.com.ar/test/icons/icon-512x512.png"
+                            <img src="https://harassantamaria.com.ar/icons/icon-512x512.png"
                                  alt="Haras Santa María"
                                  style="max-height:70px; display:block; border:0;">
                         @endif

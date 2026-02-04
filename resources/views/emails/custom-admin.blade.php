@@ -18,7 +18,7 @@
                     <!-- Logo centrado -->
                     <tr>
                         <td align="center" style="padding:28px 24px 16px 24px;">
-                            <img src="https://harassantamaria.com.ar/test/icons/icon-512x512.png" alt="Haras Santa María" style="height:66px; display:block; border:0;">
+                            <img src="https://harassantamaria.com.ar/icons/icon-512x512.png" alt="Haras Santa María" style="height:66px; display:block; border:0;">
                         </td>
                     </tr>
 

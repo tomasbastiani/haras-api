@@ -38,22 +38,11 @@ class GastosComunesDisponiblesNotification extends Notification
         // Logo público (asegurate de tener public/images/hsm.png)
         $logoUrl = 'https://harassantamaria.com.ar/icons/icon-512x512.png';
 
-        // Obtener lotes desde la tabla `gastoscomunes` por email
-        $lotes = [];
-
-        if (!empty($notifiable->email)) {
-            $lotes = DB::table('gastoscomunes')
-                ->where('email', $notifiable->email)
-                ->pluck('nlote')
-                ->unique()
-                ->toArray();
-        }else{
-            $lotes = DB::table('gastoscomunes')
-            ->where('email', '1974consultoria@gmail.com') //email de prueba
+        $lotes = DB::table('gastoscomunes')
+            ->where('email', $email)
             ->pluck('nlote')
             ->unique()
             ->toArray();
-        }
 
         $lotesTexto = !empty($lotes)
             ? implode(', ', $lotes)

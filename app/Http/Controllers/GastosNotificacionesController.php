@@ -32,30 +32,33 @@ class GastosNotificacionesController extends Controller
          */
 
 
-        /*
 
 
-        $testEmails = [
-            'tomas.bastiani@hotmail.com',
-            'Leobastiani@outlook.com',
-        ];
+        // $testEmails = [
+        //     'tomas.bastiani@hotmail.com',
+        //     'totoprofly89@gmail.com',
+        // ];
 
-        Log::info('Enviando emails de PRUEBA (Gastos Comunes)', [
-            'periodo' => $periodo,
-            'emails'  => $testEmails,
-            'total'   => count($testEmails),
-        ]);
+        // Log::info('Enviando emails de PRUEBA (Gastos Comunes)', [
+        //     'periodo' => $periodo,
+        //     'emails'  => $testEmails,
+        //     'total'   => count($testEmails),
+        // ]);
 
-        Notification::route('mail', $testEmails)
-            ->notify(new GastosComunesDisponiblesNotification($periodo));
+        // // Notification::route('mail', $testEmails)
+        // //     ->notify(new GastosComunesDisponiblesNotification($periodo));
 
-        return response()->json([
-            'message' => 'Correos de prueba enviados correctamente.',
-        ]);
+        // foreach ($testEmails as $email) {
+        //     Notification::route('mail', $email)
+        //         ->notify(new GastosComunesDisponiblesNotification($periodo));
+        // }
+
+        // return response()->json([
+        //     'message' => 'Correos de prueba enviados correctamente.',
+        // ]);
 
 
 
-        */
 
 
 
@@ -93,8 +96,14 @@ class GastosNotificacionesController extends Controller
         ]);
 
         // Enviar notificación a todos los emails reales
-        Notification::route('mail', $emails)
-            ->notify(new GastosComunesDisponiblesNotification($periodo));
+        // Notification::route('mail', $emails)
+        //     ->notify(new GastosComunesDisponiblesNotification($periodo));
+
+        foreach ($emails as $email) {
+            Notification::route('mail', $email)
+                ->notify(new GastosComunesDisponiblesNotification($periodo));
+        }
+
 
         return response()->json([
             'message' => 'Correos enviados correctamente.',

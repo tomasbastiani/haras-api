@@ -40,7 +40,7 @@
                 <tr>
                     <td style="padding:0 32px 8px 32px; color:#111827; font-size:15px; line-height:1.6;">
                         <p style="margin:0 0 10px 0;">
-                            Hola, <strong>{{ $nombre }}</strong>
+                            Estimado, <strong>{{ $nombre }}</strong>
                         </p>
 
                         <p style="margin:10px 0;">

@@ -6,6 +6,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\DB;
+use App\Models\User;
 
 class GastosComunesDisponiblesNotification extends Notification
 {
@@ -29,7 +30,10 @@ class GastosComunesDisponiblesNotification extends Notification
         $loginUrl = 'https://harassantamaria.com.ar/login';
 
         // Nombre (columna `nombre` de tu modelo User)
-        $nombre = $notifiable->nombre ?? 'vecino';
+        $email = $notifiable->routeNotificationFor('mail');
+
+        $nombre = User::where('email', $email)
+        ->value('nombre') ?? 'vecino';
 
         // Logo público (asegurate de tener public/images/hsm.png)
         $logoUrl = 'https://harassantamaria.com.ar/icons/icon-512x512.png';

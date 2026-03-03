@@ -9,6 +9,7 @@ use App\Http\Controllers\ArchivoController;
 use App\Http\Controllers\GastosNotificacionesController;
 use App\Http\Controllers\AdminMailController;
 use App\Http\Controllers\ForgotPasswordController;
+use App\Http\Controllers\ImportadorController;
 
 /*
 |--------------------------------------------------------------------------
@@ -40,6 +41,10 @@ Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmai
 Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
 Route::get('/gastos/pdf/{numero}/{nlote}', [FacturaController::class, 'verPDF']);
 Route::post('/enviar-contacto', [ContactoController::class, 'enviar']);
+Route::post('/importar-gastos', [ImportadorController::class, 'importarGastos']);
+Route::post('/importar-morosos', [ImportadorController::class, 'importarMorosos']);
+Route::get('/gastoscomunes', [ImportadorController::class, 'obtenerGastos']);
+Route::get('/morosos', [ImportadorController::class, 'obtenerMorosos']);
 
 Route::get('/lotes-por-user/{email}', [FacturaController::class, 'getLotesPorUser']);
 Route::get('/cartas', [FacturaController::class, 'getCartas']);
@@ -62,3 +67,7 @@ Route::middleware('throttle:5,1')->group(function () {
 
 Route::post('/password/reset', [ForgotPasswordController::class, 'resetPassword']);
 
+Route::get('/clear-cache-temp', function () {
+    Artisan::call('optimize:clear');
+    return 'Cache cleared';
+});

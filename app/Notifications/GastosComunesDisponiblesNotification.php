@@ -38,7 +38,7 @@ class GastosComunesDisponiblesNotification extends Notification
         // Logo público (asegurate de tener public/images/hsm.png)
         $logoUrl = 'https://harassantamaria.com.ar/icons/icon-512x512.png';
 
-        $lotes = DB::table('gastoscomunes')
+        $lotes = DB::table('gastoscomunes_notificaciones')
             ->where('email', $email)
             ->pluck('nlote')
             ->unique()

@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class GastosNotificacionesController extends Controller
 {
@@ -69,15 +70,15 @@ class GastosNotificacionesController extends Controller
          */
 
 
-        // Traer emails desde la tabla gastoscomunes, SIN duplicados y sin nulos/vacíos
-        $query = GastosComunes::query()
+        // Traer emails desde la tabla gastoscomunes_notificaciones, SIN duplicados y sin nulos/vacíos
+        $query = DB::table('gastoscomunes_notificaciones')
             ->whereNotNull('email')
             ->where('email', '<>', '');
 
         $emails = $query
-            ->distinct('email')      // evitar duplicados a nivel query
-            ->pluck('email')         // devolver solo la columna email
-            ->toArray();             // convertir a array para Notification::route
+            ->distinct()
+            ->pluck('email')
+            ->toArray();
 
         if (empty($emails)) {
             Log::warning('No se encontraron emails en gastoscomunes para enviar notificación de Gastos Comunes.', [
@@ -92,7 +93,7 @@ class GastosNotificacionesController extends Controller
         Log::info('Enviando emails REALES (Gastos Comunes)', [
             'periodo' => $periodo,
             'total'   => count($emails),
-            // 'emails'  => $emails
+            'emails'  => $emails
         ]);
 
         // Enviar notificación a todos los emails reales

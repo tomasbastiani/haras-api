@@ -9,6 +9,7 @@ class Moroso extends Model
     // Laravel asume tabla "morosos", así que no hace falta $table
     protected $fillable = [
         'email',
+        'nombre',
         'nlote',
         'monto',
         // otros campos si los tenés

@@ -42,6 +42,7 @@ class AdminMailController extends Controller
                 // ===== 2) MOROSOS =====
                 $morosos = Moroso::where('email', $email)->get();
                 $lotesMorosos = $morosos->pluck('nlote')->unique()->toArray();
+                $nombremoroso = $morosos->first()?->nombre ?? '';
 
                 // Creamos un MAPA lote => monto (deuda)
                 $montosPorLote = [];
@@ -76,7 +77,8 @@ class AdminMailController extends Controller
 
                     $detallePorLote[] =
                         "Lote: $nl\n" .
-                        "- Monto: $$monto\n" .
+                        "Monto: $$monto\n" .
+                        "Para proceder con el pago correspondiente, le solicitamos realizar la transferencia a la siguiente cuenta bancaria: \n" .
                         "- CVU: $cvu\n" .
                         "- Alias: $alias\n";
                 }
@@ -86,9 +88,10 @@ class AdminMailController extends Controller
                 // ===== 5) PLACEHOLDERS =====
                 $bodyFinal = $this->replacePlaceholders($bodyTpl, [
                     '{nombre}'      => $nombre,
+                    '{nombremoroso}' => $nombremoroso,
                     '{lote}'        => implode(', ', $lotesNormales),
                     '{lotemoroso}'  => implode(', ', $lotesMorosos),
-                    '{detalleDeudaxLote}'     => $detalleFinal,
+                    '{detalledeudaxlote}'     => $detalleFinal,
                 ]);
 
 

@@ -45,14 +45,14 @@ class ImportadorController extends Controller
 
             foreach ($rows as $index => $row) {
 
-                if ($index === 0) continue; // salta encabezado
+                if ($index === 0) continue;
 
-                if (empty($row[0]) || empty($row[1])) continue;
+                if (empty($row[0]) || empty($row[1]) || empty($row[2])) continue;
 
                 $insertData[] = [
-                    'email' => trim($row[0]),
-                    'nlote' => trim($row[1]),
-                    'numero' => $row[2] ?? null,
+                    'email'      => trim($row[0]),
+                    'nombre'     => trim($row[1]),
+                    'nlote'      => trim($row[2]),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -134,12 +134,13 @@ class ImportadorController extends Controller
 
                 if ($index === 0) continue;
 
-                if (empty($row[0]) || empty($row[1]) || empty($row[2])) continue;
+                if (empty($row[0]) || empty($row[1]) || empty($row[2]) || empty($row[3])) continue;
 
                 $insertData[] = [
-                    'email' => trim($row[0]),
-                    'nlote' => trim($row[1]),
-                    'monto' => floatval($row[2]),
+                    'email'      => trim($row[0]),
+                    'nombre'     => trim($row[1]),
+                    'nlote'      => trim($row[2]),
+                    'monto'      => floatval($row[3]),
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];

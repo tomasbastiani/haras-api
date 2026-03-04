@@ -40,12 +40,12 @@
                 <tr>
                     <td style="padding:0 32px 8px 32px; color:#111827; font-size:15px; line-height:1.6;">
                         <p style="margin:0 0 10px 0;">
-                            Estimado, <strong>{{ $nombre }}</strong>
+                            Estimado/a, <strong>{{ $nombre }}</strong>
                         </p>
 
                         <p style="margin:10px 0;">
-                            Ya están disponibles tus últimos gastos comunes
-                            para tus lotes: <strong>{{ $lotes }}</strong>.
+                            Ya están disponibles sus últimos gastos comunes
+                            para su/s lote/s: <strong>{{ $lotes }}</strong>.
                         </p>
 
                         @if(!empty($periodo))
@@ -55,8 +55,8 @@
                         @endif
 
                         <p style="margin:16px 0; color:#4b5563;">
-                            Podés acceder al portal de propietarios para consultar el detalle,
-                            descargar la documentación y ver el historial de tus gastos comunes.
+                            Puede acceder al portal de propietarios para consultar el detalle,
+                            descargar la documentación y ver el historial de sus gastos comunes.
                         </p>
                     </td>
                 </tr>
@@ -93,7 +93,7 @@
                 <tr>
                     <td style="padding:0 32px 20px 32px; color:#6b7280; font-size:12px; line-height:1.5;">
                         <p style="margin:0;">
-                            Si no esperabas este correo, podés ignorarlo. 
+                            Si no esperaba este correo, puede ignorarlo. 
                             Este mensaje es informativo y forma parte de las comunicaciones del barrio privado Haras Santa María.
                         </p>
                     </td>

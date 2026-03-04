@@ -26,18 +26,16 @@ class GastosComunesDisponiblesNotification extends Notification
 
     public function toMail($notifiable): MailMessage
     {
-        // URL al login
         $loginUrl = 'https://harassantamaria.com.ar/login';
+        $logoUrl  = 'https://harassantamaria.com.ar/icons/icon-512x512.png';
 
-        // Nombre (columna `nombre` de tu modelo User)
         $email = $notifiable->routeNotificationFor('mail');
 
-        $nombre = User::where('email', $email)
-        ->value('nombre') ?? 'vecino';
+        $nombre = DB::table('gastoscomunes_notificaciones')
+            ->where('email', $email)
+            ->value('nombre') ?? 'vecino';
 
-        // Logo público (asegurate de tener public/images/hsm.png)
-        $logoUrl = 'https://harassantamaria.com.ar/icons/icon-512x512.png';
-
+        // Obtener lotes
         $lotes = DB::table('gastoscomunes_notificaciones')
             ->where('email', $email)
             ->pluck('nlote')

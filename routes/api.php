@@ -10,6 +10,7 @@ use App\Http\Controllers\GastosNotificacionesController;
 use App\Http\Controllers\AdminMailController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\ImportadorController;
+use App\Http\Controllers\FcmController;
 
 /*
 |--------------------------------------------------------------------------
@@ -59,6 +60,12 @@ Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
 
 Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
 Route::post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
+Route::post('/fcm-token', [FcmController::class, 'saveToken']);
+Route::post('/fcm-test', [FcmController::class, 'sendTest']);
+Route::post('/fcm-send', [FcmController::class, 'sendNotification']);
+Route::post('/notifications', [FcmController::class, 'getNotifications']);
+Route::post('/notifications/read', [FcmController::class, 'markAsRead']);
+Route::post('/notifications/read-all', [FcmController::class, 'markAllAsRead']);
 
 // Limitar un poco el spam en forgot
 Route::middleware('throttle:5,1')->group(function () {

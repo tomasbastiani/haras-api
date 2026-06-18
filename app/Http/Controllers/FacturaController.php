@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Hash;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FacturaController extends Controller
@@ -201,7 +202,14 @@ class FacturaController extends Controller
     {
         $request->validate([
             'email' => 'required|email',
-            'password' => 'required|string|min:4'
+            'password' => [
+                'required',
+                'string',
+                'min:8',
+                'regex:/[A-Z]/',
+                'regex:/[0-9]/',
+            ],
+            'nlote' => 'nullable' // Opcional
         ]);
 
         $exists = DB::table('users')->where('email', $request->email)->exists();
@@ -211,26 +219,35 @@ class FacturaController extends Controller
         }
 
         try {
-            DB::table('users')->insert([
-                'nombre' => $request->nombre,
-                'email' => $request->email,
-                'password' => $request->password,
-                'admin' => 0,
-                'created_at' => now(),
-                'updated_at' => now()
-            ]);
+            DB::transaction(function () use ($request) {
+                // 1. Crear el usuario
+                DB::table('users')->insert([
+                    'nombre' => $request->nombre,
+                    'email' => $request->email,
+                    'password' => Hash::make($request->password),
+                    'admin' => 0,
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                // 2. Si se envió un lote, actualizarlo de una vez
+                if ($request->nlote) {
+                    DB::table('gastoscomunes')
+                        ->where('nlote', $request->nlote)
+                        ->update(['email' => $request->email]);
+                }
+            });
 
             return response()->json(['success' => true]);
         } catch (\Exception $e) {
-            Log::error('Error al crear usuario', [
+            Log::error('Error al crear usuario y actualizar lote', [
                 'message' => $e->getMessage(),
-                'code'    => $e->getCode(),
-                'trace'   => $e->getTraceAsString(),
+                'nlote'   => $request->nlote,
             ]);
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error al crear el usuario.'
+                'message' => 'Error al procesar la solicitud.'
             ], 500);
         }
     }

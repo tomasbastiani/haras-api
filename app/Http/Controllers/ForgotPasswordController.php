@@ -114,7 +114,7 @@ class ForgotPasswordController extends Controller
             ], 404);
         }
 
-        $user->password = $request->password;
+        $user->password = Hash::make($request->password);
         $user->save();
 
         // Borrar todos los tokens de ese email (para que no se puedan reutilizar)

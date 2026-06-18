@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 
 class AuthController extends Controller
@@ -23,7 +24,20 @@ class AuthController extends Controller
             return response()->json(['message' => 'Credenciales inválidas'], 401);
         }
 
-        if ($user->password !== $credentials['password']) {
+        // Intentar validar con Hash (Bcrypt)
+        if (Hash::check($credentials['password'], $user->password)) {
+            // Éxito con hash
+        } 
+        // Si no es hash, intentar validar con texto plano (Legado)
+        else if ($user->password === $credentials['password']) {
+            \Log::info('Login correcto (Legado) para: ' . $credentials['email']);
+            return response()->json([
+                'message' => 'Login correcto',
+                'user' => $user,
+                'must_change_password' => true
+            ]);
+        } 
+        else {
             \Log::warning('Password incorrecto para: ' . $credentials['email']);
             return response()->json(['message' => 'Credenciales inválidas'], 401);
         }
@@ -48,8 +62,10 @@ class AuthController extends Controller
             return response()->json(['message' => 'Usuario no encontrado.'], 404);
         }
 
-        // Comparación directa si las contraseñas están en texto plano (NO recomendado)
-        if ($request->current_password !== $user->password) {
+        // Validar contraseña actual (soporta hash y texto plano)
+        $currentMatch = Hash::check($request->current_password, $user->password) || ($request->current_password === $user->password);
+
+        if (!$currentMatch) {
             return response()->json([
                 'message' => 'La contraseña actual no es correcta.'
             ], 400);
@@ -61,8 +77,8 @@ class AuthController extends Controller
             ], 400);
         }
 
-        // Guardar nueva contraseña como texto plano (NO recomendado)
-        $user->password = $request->new_password;
+        // Guardar nueva contraseña SIEMPRE hasheada
+        $user->password = Hash::make($request->new_password);
         $user->save();
 
         return response()->json([

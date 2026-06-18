@@ -78,3 +78,15 @@ Route::get('/clear-cache-temp', function () {
     Artisan::call('optimize:clear');
     return 'Cache cleared';
 });
+
+// ⚠️ RUTA TEMPORAL PARA MIGRACIÓN DE PASSWORDS
+// Visitar: https://harassantamaria.com.ar/api/public/index.php/api/run-migration-hash-2025
+// LUEGO DE USAR, ELIMINAR ESTA RUTA POR SEGURIDAD.
+Route::get('/run-migration-hash-2025', function () {
+    try {
+        \Illuminate\Support\Facades\Artisan::call('auth:hash-default');
+        return "Resultado: <pre>" . \Illuminate\Support\Facades\Artisan::output() . "</pre>";
+    } catch (\Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+});

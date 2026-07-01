@@ -51,4 +51,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserNotification::class);
     }
+
+    public function turnos()
+    {
+        return $this->hasMany(Turno::class);
+    }
 }

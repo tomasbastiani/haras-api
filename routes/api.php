@@ -11,6 +11,7 @@ use App\Http\Controllers\AdminMailController;
 use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\ImportadorController;
 use App\Http\Controllers\FcmController;
+use App\Http\Controllers\TurneroController;
 
 /*
 |--------------------------------------------------------------------------
@@ -66,6 +67,14 @@ Route::post('/fcm-send', [FcmController::class, 'sendNotification']);
 Route::post('/notifications', [FcmController::class, 'getNotifications']);
 Route::post('/notifications/read', [FcmController::class, 'markAsRead']);
 Route::post('/notifications/read-all', [FcmController::class, 'markAllAsRead']);
+
+// Turnero de canchas
+Route::get('/turnero/canchas', [TurneroController::class, 'canchas']);
+Route::get('/turnero/disponibilidad', [TurneroController::class, 'disponibilidad']);
+Route::post('/turnero/reservar', [TurneroController::class, 'reservar']);
+Route::post('/turnero/cancelar/{id}', [TurneroController::class, 'cancelar']);
+Route::get('/turnero/mis-turnos', [TurneroController::class, 'misTurnos']);
+Route::get('/turnero/admin/turnos', [TurneroController::class, 'adminTurnos']);
 
 // Limitar un poco el spam en forgot
 Route::middleware('throttle:5,1')->group(function () {

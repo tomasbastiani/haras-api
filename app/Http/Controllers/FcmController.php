@@ -13,14 +13,11 @@ class FcmController extends Controller
     public function saveToken(Request $request)
     {
         $request->validate([
-            'email' => 'required|email|exists:users,email',
             'token' => 'required|string',
         ]);
 
-        $user = User::where('email', $request->email)->first();
-
         // Guardamos el token (firstOrCreate evita duplicados directos de ese mismo token para ese usuario)
-        $user->fcmTokens()->firstOrCreate([
+        $request->user()->fcmTokens()->firstOrCreate([
             'token' => $request->token,
         ]);
 
@@ -105,19 +102,28 @@ class FcmController extends Controller
         ]);
     }
 
-    // Obtener notificaciones del usuario logueado (últimos 30 días)
+    // Obtener notificaciones del usuario logueado (últimos 30 días), paginadas
     public function getNotifications(Request $request)
     {
-        $request->validate(['email' => 'required|email|exists:users,email']);
-        
-        $user = User::where('email', $request->email)->first();
-        
-        $notifications = $user->notifications()
+        $perPage = 15;
+
+        $paginator = $request->user()->notifications()
             ->recent()
             ->orderBy('created_at', 'desc')
-            ->get();
+            ->paginate($perPage);
 
-        return response()->json($notifications);
+        // Independiente de la página cargada, para que el badge del navbar sea siempre exacto.
+        $unreadCount = $request->user()->notifications()
+            ->recent()
+            ->where('is_read', false)
+            ->count();
+
+        return response()->json([
+            'data' => $paginator->items(),
+            'current_page' => $paginator->currentPage(),
+            'has_more' => $paginator->hasMorePages(),
+            'unread_count' => $unreadCount,
+        ]);
     }
 
     // Marcar una sola como leída
@@ -125,12 +131,11 @@ class FcmController extends Controller
     {
         $request->validate([
             'id' => 'required|exists:user_notifications,id',
-            'email' => 'required|email|exists:users,email'
         ]);
-        
-        $user = User::where('email', $request->email)->first();
-        
-        $user->notifications()
+
+        // El scope de la relación ya filtra por el usuario autenticado: si el id
+        // pertenece a otro usuario, no actualiza ninguna fila (evita IDOR).
+        $request->user()->notifications()
             ->where('id', $request->id)
             ->update(['is_read' => true]);
 
@@ -140,14 +145,62 @@ class FcmController extends Controller
     // Marcar todas como leídas
     public function markAllAsRead(Request $request)
     {
-        $request->validate(['email' => 'required|email|exists:users,email']);
-        
-        $user = User::where('email', $request->email)->first();
-        
-        $user->notifications()
+        $request->user()->notifications()
             ->where('is_read', false)
             ->update(['is_read' => true]);
 
         return response()->json(['message' => 'Notificaciones marcadas como leídas']);
+    }
+
+    // Panel admin: detalle de qué usuario leyó qué notificación (paginado + filtros)
+    public function readLog(Request $request)
+    {
+        $request->validate([
+            'email' => 'nullable|string',
+            'title' => 'nullable|string',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date',
+        ]);
+
+        $perPage = 20;
+
+        $query = UserNotification::with('user:id,email,nombre')
+            ->where('is_read', true);
+
+        if ($request->filled('email')) {
+            $email = $request->email;
+            $query->whereHas('user', fn ($q) => $q->where('email', 'like', "%{$email}%"));
+        }
+
+        if ($request->filled('title')) {
+            $query->where('title', 'like', '%' . $request->title . '%');
+        }
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('updated_at', '>=', $request->date_from);
+        }
+
+        if ($request->filled('date_to')) {
+            $query->whereDate('updated_at', '<=', $request->date_to);
+        }
+
+        $paginator = $query->orderByDesc('updated_at')->paginate($perPage);
+
+        $data = collect($paginator->items())->map(fn ($n) => [
+            'id' => $n->id,
+            'email' => $n->user->email ?? null,
+            'nombre' => $n->user->nombre ?? null,
+            'title' => $n->title,
+            'body' => $n->body,
+            'sent_at' => $n->created_at,
+            'read_at' => $n->updated_at,
+        ]);
+
+        return response()->json([
+            'data' => $data,
+            'current_page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'total' => $paginator->total(),
+        ]);
     }
 }

@@ -24,28 +24,40 @@ class AuthController extends Controller
             return response()->json(['message' => 'Credenciales inválidas'], 401);
         }
 
+        $mustChangePassword = false;
+
         // Intentar validar con Hash (Bcrypt)
         if (Hash::check($credentials['password'], $user->password)) {
             // Éxito con hash
-        } 
+        }
         // Si no es hash, intentar validar con texto plano (Legado)
         else if ($user->password === $credentials['password']) {
             \Log::info('Login correcto (Legado) para: ' . $credentials['email']);
-            return response()->json([
-                'message' => 'Login correcto',
-                'user' => $user,
-                'must_change_password' => true
-            ]);
-        } 
+            $mustChangePassword = true;
+        }
         else {
             \Log::warning('Password incorrecto para: ' . $credentials['email']);
             return response()->json(['message' => 'Credenciales inválidas'], 401);
         }
 
-        // Login exitoso - generar token o sesión
         \Log::info('Login correcto para: ' . $credentials['email']);
-        // Aquí podés generar un token si lo necesitás, o simplemente responder
-        return response()->json(['message' => 'Login correcto', 'user' => $user]);
+
+        // Token de acceso (Sanctum) para autenticar los siguientes requests
+        $token = $user->createToken('spa')->plainTextToken;
+
+        return response()->json([
+            'message' => 'Login correcto',
+            'user' => $user,
+            'must_change_password' => $mustChangePassword,
+            'token' => $token,
+        ]);
+    }
+
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json(['message' => 'Sesión cerrada']);
     }
 
     public function changePassword(Request $request)

@@ -61,12 +61,22 @@ Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
 
 Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
 Route::post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
-Route::post('/fcm-token', [FcmController::class, 'saveToken']);
-Route::post('/fcm-test', [FcmController::class, 'sendTest']);
-Route::post('/fcm-send', [FcmController::class, 'sendNotification']);
-Route::post('/notifications', [FcmController::class, 'getNotifications']);
-Route::post('/notifications/read', [FcmController::class, 'markAsRead']);
-Route::post('/notifications/read-all', [FcmController::class, 'markAllAsRead']);
+
+// Notificaciones / FCM: requieren sesión válida (token Sanctum). El usuario se
+// identifica por el token, nunca por un email enviado en el body (evita IDOR).
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('/logout', [AuthController::class, 'logout']);
+    Route::post('/fcm-token', [FcmController::class, 'saveToken']);
+    Route::post('/notifications', [FcmController::class, 'getNotifications']);
+    Route::post('/notifications/read', [FcmController::class, 'markAsRead']);
+    Route::post('/notifications/read-all', [FcmController::class, 'markAllAsRead']);
+
+    Route::middleware('admin')->group(function () {
+        Route::post('/fcm-test', [FcmController::class, 'sendTest']);
+        Route::post('/fcm-send', [FcmController::class, 'sendNotification']);
+        Route::get('/notifications/read-log', [FcmController::class, 'readLog']);
+    });
+});
 
 // Turnero de canchas
 Route::get('/turnero/canchas', [TurneroController::class, 'canchas']);

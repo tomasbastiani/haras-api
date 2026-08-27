@@ -12,6 +12,9 @@ use App\Http\Controllers\ForgotPasswordController;
 use App\Http\Controllers\ImportadorController;
 use App\Http\Controllers\FcmController;
 use App\Http\Controllers\TurneroController;
+use App\Http\Controllers\ChatbotController;
+use App\Http\Controllers\ReclamoController;
+use App\Http\Controllers\PaqueteController;
 
 /*
 |--------------------------------------------------------------------------
@@ -76,6 +79,50 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/fcm-send', [FcmController::class, 'sendNotification']);
         Route::get('/notifications/read-log', [FcmController::class, 'readLog']);
     });
+});
+
+// Chatbot de reclamos. Todo bajo sesión: el propietario sale del token de
+// Sanctum, nunca de un email en el body (mismo criterio que FCM).
+Route::middleware('auth:sanctum')->group(function () {
+    // 12 mensajes por minuto: suficiente para conversar, corta el abuso de una
+    // API que se paga por token.
+    Route::middleware('throttle:12,1')->group(function () {
+        Route::post('/chat/mensaje', [ChatbotController::class, 'mensaje']);
+    });
+    Route::get('/chat/historial', [ChatbotController::class, 'historial']);
+    Route::post('/chat/reiniciar', [ChatbotController::class, 'reiniciar']);
+
+    // Reclamos
+    Route::get('/reclamos/mios', [ReclamoController::class, 'mios']);
+    Route::get('/reclamos', [ReclamoController::class, 'index']);
+    Route::post('/reclamos/{id}/tomar', [ReclamoController::class, 'tomar']);
+    Route::post('/reclamos/{id}/resolver', [ReclamoController::class, 'resolver']);
+});
+
+// Paquetería. Todo bajo sesión: el titular sale del token de Sanctum, nunca de
+// un email en el body (mismo criterio que FCM y reclamos).
+Route::middleware('auth:sanctum')->group(function () {
+    // Vecino
+    Route::get('/paquetes/mios', [PaqueteController::class, 'mios']);
+    Route::post('/paquetes/{id}/confirmar', [PaqueteController::class, 'confirmar']);
+    Route::post('/paquetes/{id}/desconocer', [PaqueteController::class, 'desconocer']);
+
+    // Oficina de paquetería
+    Route::get('/paqueteria/acceso', [PaqueteController::class, 'acceso']);
+    Route::get('/paquetes', [PaqueteController::class, 'index']);
+    Route::post('/paquetes', [PaqueteController::class, 'store']);
+    Route::post('/paquetes/{id}/devolver', [PaqueteController::class, 'devolver']);
+
+    // Cerrar entrega. Throttle bajo: el PIN es de 6 dígitos y el bloqueo por
+    // intentos es por paquete, así que esto corta el barrido sobre muchos
+    // paquetes a la vez desde una misma terminal.
+    Route::middleware('throttle:20,1')->group(function () {
+        Route::post('/paquetes/{id}/entregar', [PaqueteController::class, 'entregar']);
+    });
+
+    // Compartidas (el controlador resuelve si es titular, operario o admin)
+    Route::get('/paquetes/{id}', [PaqueteController::class, 'show']);
+    Route::get('/paquetes/{id}/firma', [PaqueteController::class, 'firma']);
 });
 
 // Turnero de canchas

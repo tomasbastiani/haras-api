@@ -25,6 +25,7 @@ class Paquete extends Model
         'tipo',
         'ubicacion',
         'observaciones',
+        'foto_path',
         'estado',
         'recibido_por',
         'recibido_at',
@@ -81,6 +82,11 @@ class Paquete extends Model
     public function scopeSinPropietario($query)
     {
         return $query->whereNull('user_id');
+    }
+
+    public function tieneFoto(): bool
+    {
+        return ! empty($this->foto_path);
     }
 
     public function estaPendiente(): bool

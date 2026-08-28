@@ -164,10 +164,18 @@ class PaqueteController extends Controller
      * Si el usuario puede operar la paquetería. Lo usa el menú de la PWA para
      * mostrar u ocultar la sección de la oficina; el permiso real lo sigue
      * chequeando cada endpoint.
+     *
+     * `dedicado` distingue a la cuenta de portería del vecino con permiso
+     * aditivo: la PWA le recorta el menú al resto de las secciones.
      */
     public function acceso(Request $request)
     {
-        return response()->json(['operario' => $this->puedeOperar($request->user())]);
+        $user = $request->user();
+
+        return response()->json([
+            'operario' => $this->puedeOperar($user),
+            'dedicado' => $user->esPaqueteria(),
+        ]);
     }
 
     /** Bandeja de la oficina. */
@@ -225,7 +233,15 @@ class PaqueteController extends Controller
             'tipo'          => 'required|in:sobre,caja_chica,caja_grande,bulto',
             'ubicacion'     => 'nullable|string|max:100',
             'observaciones' => 'nullable|string|max:1000',
+            // Data URL de la foto del paquete. El cliente ya la redimensiona y
+            // recomprime antes de mandarla; acá se valida y se acota igual.
+            'foto'          => 'nullable|string',
         ]);
+
+        // Fuera de la transacción a propósito: si la imagen es inválida corta
+        // acá con 422, sin haber creado el paquete ni sellado ningún evento.
+        $foto = isset($datos['foto']) ? $this->decodificarFoto($datos['foto']) : null;
+        unset($datos['foto']);
 
         [$destinatarios, $email] = $this->resolverDestinatarios($datos['nlote']);
 
@@ -236,7 +252,7 @@ class PaqueteController extends Controller
 
         $pin = Paquete::generarPin();
 
-        $paquete = DB::transaction(function () use ($datos, $userId, $email, $pin, $request) {
+        $paquete = DB::transaction(function () use ($datos, $userId, $email, $pin, $request, $foto) {
             $paquete = Paquete::create($datos + [
                 'codigo'        => Paquete::generarCodigo(),
                 'pin'           => $pin,
@@ -255,16 +271,25 @@ class PaqueteController extends Controller
                 "Ingresó a paquetería ({$paquete->correo})",
                 $request->user()->id,
                 [
-                    'codigo'    => $paquete->codigo,
-                    'nlote'     => $paquete->nlote,
-                    'tipo'      => $paquete->tipo,
-                    'tracking'  => $paquete->tracking,
-                    'ubicacion' => $paquete->ubicacion,
+                    'codigo'       => $paquete->codigo,
+                    'nlote'        => $paquete->nlote,
+                    'tipo'         => $paquete->tipo,
+                    'tracking'     => $paquete->tracking,
+                    'ubicacion'    => $paquete->ubicacion,
+                    // Sella la foto sin meterla en la bitácora: si después alguien
+                    // reemplaza el archivo en disco, el hash ya no da.
+                    'foto_sha256'  => $foto ? hash('sha256', $foto) : null,
                 ]
             );
 
             return $paquete;
         });
+
+        // Después del commit: un write a disco no se revierte con un rollback,
+        // así que primero se confirma la fila y recién ahí se guarda el archivo.
+        if ($foto) {
+            $paquete->update(['foto_path' => $this->guardarFoto($paquete->id, $foto)]);
+        }
 
         if ($userId) {
             $this->notificarLlegada($paquete, $pin);
@@ -305,6 +330,15 @@ class PaqueteController extends Controller
             'nombre'        => 'required|string|max:150',
             'dni'           => 'nullable|string|max:20',
             'firma'         => 'required|string',
+            // Foto del momento de la entrega, obligatoria: junto con la firma
+            // es lo que sostiene el acta si después se discute la entrega.
+            'foto'          => 'required|string',
+        ], [
+            'foto.required'  => 'Sacá una foto de la entrega antes de confirmarla.',
+            'firma.required' => 'Falta la firma de quien retira.',
+            'nombre.required' => 'Falta el nombre de quien retira.',
+            'pin.required_if' => 'Pedile el PIN a quien retira y escribilo acá.',
+            'motivo_manual.required_if' => 'Explicá por qué se entrega sin PIN.',
         ]);
 
         $paquete = Paquete::findOrFail($id);
@@ -329,7 +363,15 @@ class PaqueteController extends Controller
 
         $firmaPath = $this->guardarFirma($paquete->id, $datos['firma']);
 
-        $entrega = DB::transaction(function () use ($paquete, $datos, $firmaPath, $request) {
+        // Mismo criterio que la firma: se escribe antes de la transacción para
+        // que el hash pueda entrar al evento sellado. Si la transacción fallara,
+        // queda un archivo huérfano; es preferible a un acta sin su foto.
+        $fotoEntregaPath = $this->guardarFotoEntrega(
+            $paquete->id,
+            $this->decodificarFoto($datos['foto'])
+        );
+
+        $entrega = DB::transaction(function () use ($paquete, $datos, $firmaPath, $fotoEntregaPath, $request) {
             $entrega = PaqueteEntrega::create([
                 'paquete_id'    => $paquete->id,
                 'folio'         => 'PENDIENTE',
@@ -339,6 +381,7 @@ class PaqueteController extends Controller
                 'nombre'        => $datos['nombre'],
                 'dni'           => $datos['dni'] ?? null,
                 'firma_path'    => $firmaPath,
+                'foto_path'     => $fotoEntregaPath,
                 'operario_id'   => $request->user()->id,
                 'entregado_at'  => now(),
                 // Sin titular vinculado no hay a quién pedirle acuse. Se marca
@@ -366,6 +409,9 @@ class PaqueteController extends Controller
                     'nombre'        => $entrega->nombre,
                     'dni'           => $entrega->dni,
                     'firma_sha256'  => hash('sha256', Storage::disk('local')->get($entrega->firma_path)),
+                    // Sella la foto sin meterla en la bitácora: si después alguien
+                    // reemplaza el archivo en disco, el hash ya no da.
+                    'foto_sha256'   => hash('sha256', Storage::disk('local')->get($fotoEntregaPath)),
                 ]
             );
 
@@ -380,6 +426,51 @@ class PaqueteController extends Controller
             'message' => 'Entrega registrada. Acta ' . $entrega->folio . '.',
             'entrega' => $entrega,
         ]);
+    }
+
+    /**
+     * Observación de la oficina sobre un paquete.
+     *
+     * Va al mismo timeline sellado que el resto: el propietario la ve en "Ver
+     * seguimiento", y queda encadenada como todo lo demás. Por eso mismo no se
+     * puede editar ni borrar después — lo que se escribe acá, queda.
+     *
+     * Se permite en cualquier estado a propósito: la observación más útil suele
+     * ser posterior a la entrega ("el vecino avisó que llegó abierto").
+     */
+    public function observar(Request $request, $id)
+    {
+        if (! $this->puedeOperar($request->user())) {
+            return response()->json(['message' => 'No tenés acceso a la paquetería.'], 403);
+        }
+
+        // El límite es el de la columna `nota` de paquete_eventos.
+        $datos = $request->validate([
+            'nota' => 'required|string|max:500',
+        ], [
+            'nota.required' => 'Escribí la observación antes de guardarla.',
+        ]);
+
+        $paquete = Paquete::findOrFail($id);
+
+        $evento = PaqueteEvento::registrar(
+            $paquete->id,
+            'observacion',
+            trim($datos['nota']),
+            $request->user()->id,
+            ['codigo' => $paquete->codigo]
+        );
+
+        return response()->json([
+            'message' => 'Observación agregada al seguimiento del paquete.',
+            'evento'  => [
+                'id'         => $evento->id,
+                'tipo'       => $evento->tipo,
+                'nota'       => $evento->nota,
+                'por'        => $request->user()->nombre,
+                'created_at' => $evento->created_at,
+            ],
+        ], 201);
     }
 
     /** El correo se lleva el paquete de vuelta. */
@@ -440,13 +531,81 @@ class PaqueteController extends Controller
         ]);
     }
 
+    /**
+     * Sirve la foto del paquete. Mismo criterio que la firma: va por endpoint
+     * autenticado y no por disco público, porque muestra la etiqueta con el
+     * nombre y el lote del destinatario.
+     *
+     * A diferencia de firma(), acá se usa esDestinatario(): un lote puede tener
+     * varios propietarios y todos tienen que poder ver la foto de su paquete.
+     */
+    public function foto(Request $request, $id)
+    {
+        $paquete = Paquete::findOrFail($id);
+        $user = $request->user();
+
+        if (! $this->esDestinatario($user, $paquete) && ! $this->puedeOperar($user)) {
+            return response()->json(['message' => 'No tenés acceso a esta foto.'], 403);
+        }
+
+        if (! $paquete->tieneFoto() || ! Storage::disk('local')->exists($paquete->foto_path)) {
+            return response()->json(['message' => 'Este paquete no tiene foto.'], 404);
+        }
+
+        $binario = Storage::disk('local')->get($paquete->foto_path);
+
+        return response($binario, 200, [
+            'Content-Type'  => $this->mimeDeImagen($binario),
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
+    /**
+     * Sirve la foto tomada en el momento de la entrega. Mismo criterio de
+     * acceso que la foto del paquete: titular (cualquier propietario del lote),
+     * operario o admin.
+     */
+    public function entregaFoto(Request $request, $id)
+    {
+        $paquete = Paquete::with('entrega')->findOrFail($id);
+        $user = $request->user();
+
+        if (! $this->esDestinatario($user, $paquete) && ! $this->puedeOperar($user)) {
+            return response()->json(['message' => 'No tenés acceso a esta foto.'], 403);
+        }
+
+        $path = $paquete->entrega?->foto_path;
+
+        if (! $path || ! Storage::disk('local')->exists($path)) {
+            return response()->json(['message' => 'Esta entrega no tiene foto.'], 404);
+        }
+
+        $binario = Storage::disk('local')->get($path);
+
+        return response($binario, 200, [
+            'Content-Type'  => $this->mimeDeImagen($binario),
+            'Cache-Control' => 'private, no-store',
+        ]);
+    }
+
     // =====================================================================
     // Internos
     // =====================================================================
 
+    /**
+     * Los tres caminos al mismo permiso:
+     *  - admin: puede todo.
+     *  - users.paqueteria: cuenta dedicada de portería.
+     *  - paqueteria_operarios: permiso aditivo sobre la cuenta de un vecino.
+     *
+     * La tabla se sigue chequeando para no dar de baja a quien ya estaba
+     * habilitado ahí antes de que existiera la cuenta dedicada.
+     */
     private function puedeOperar($user): bool
     {
-        return (bool) $user->admin || PaqueteriaOperario::esOperario($user->id);
+        return (bool) $user->admin
+            || $user->esPaqueteria()
+            || PaqueteriaOperario::esOperario($user->id);
     }
 
     /**
@@ -587,6 +746,81 @@ class PaqueteController extends Controller
         Storage::disk('local')->put($path, $binario);
 
         return $path;
+    }
+
+    /**
+     * Valida la foto que manda la oficina y devuelve el binario.
+     *
+     * Acepta JPEG y PNG. Chequea los magic bytes y no el encabezado del data
+     * URL: el cliente puede mentir en el prefijo, los primeros bytes del
+     * archivo no.
+     */
+    private function decodificarFoto(string $dataUrl): string
+    {
+        if (! preg_match('#^data:image/(jpeg|jpg|png);base64,#i', $dataUrl, $m)) {
+            throw ValidationException::withMessages([
+                'foto' => 'La foto debe ser una imagen JPEG o PNG en base64.',
+            ]);
+        }
+
+        $binario = base64_decode(substr($dataUrl, strlen($m[0])), true);
+
+        if ($binario === false || $this->mimeDeImagen($binario) === null) {
+            throw ValidationException::withMessages([
+                'foto' => 'La foto no es una imagen válida.',
+            ]);
+        }
+
+        // La PWA la redimensiona a 1280px y la recomprime antes de subirla, así
+        // que 4 MB es holgado. El tope está para que un cliente modificado no
+        // llene el disco de la oficina.
+        if (strlen($binario) > 4 * 1024 * 1024) {
+            throw ValidationException::withMessages([
+                'foto' => 'La foto supera el tamaño máximo permitido (4 MB).',
+            ]);
+        }
+
+        return $binario;
+    }
+
+    /** Guarda la foto en disco privado y devuelve la ruta. */
+    private function guardarFoto(int $paqueteId, string $binario): string
+    {
+        $ext = $this->mimeDeImagen($binario) === 'image/png' ? 'png' : 'jpg';
+        $path = "paqueteria/fotos/{$paqueteId}.{$ext}";
+
+        Storage::disk('local')->put($path, $binario);
+
+        return $path;
+    }
+
+    /**
+     * Guarda la foto de la entrega. Va a otra carpeta que la del ingreso: son
+     * dos momentos distintos del expediente y el nombre del archivo es el mismo
+     * id de paquete en los dos casos.
+     */
+    private function guardarFotoEntrega(int $paqueteId, string $binario): string
+    {
+        $ext = $this->mimeDeImagen($binario) === 'image/png' ? 'png' : 'jpg';
+        $path = "paqueteria/entregas/{$paqueteId}.{$ext}";
+
+        Storage::disk('local')->put($path, $binario);
+
+        return $path;
+    }
+
+    /** Mime real según los primeros bytes. null si no es una imagen soportada. */
+    private function mimeDeImagen(string $binario): ?string
+    {
+        if (str_starts_with($binario, "\xFF\xD8\xFF")) {
+            return 'image/jpeg';
+        }
+
+        if (str_starts_with($binario, "\x89PNG\r\n\x1a\n")) {
+            return 'image/png';
+        }
+
+        return null;
     }
 
     private function notificarLlegada(Paquete $paquete, string $pin): void

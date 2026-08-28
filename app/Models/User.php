@@ -38,9 +38,30 @@ class User extends Authenticatable
      *
      * @var array<string, string>
      */
+    /**
+     * `paqueteria` queda fuera de $fillable a propósito: es un rango, no un
+     * dato del perfil. Se asigna explícitamente desde el controlador de admin
+     * para que ningún create()/update() masivo pueda otorgarlo por accidente.
+     *
+     * `admin` no se castea: el front lo compara con === 1 y castearlo a boolean
+     * cambiaría el JSON del login.
+     */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'paqueteria'        => 'boolean',
     ];
+
+    /**
+     * Cuenta dedicada de paquetería (portería): entra directo a la oficina y no
+     * ve gastos comunes, lotes, turnero ni archivos.
+     *
+     * Distinto de PaqueteriaOperario, que es el permiso aditivo de un vecino
+     * que además atiende la oficina.
+     */
+    public function esPaqueteria(): bool
+    {
+        return (bool) $this->paqueteria;
+    }
 
     public function fcmTokens()
     {

@@ -36,6 +36,22 @@ class PaqueteEntrega extends Model
     /** La ruta interna del archivo no viaja al cliente; se sirve por endpoint. */
     protected $hidden = ['firma_path', 'foto_path'];
 
+    /**
+     * El cliente no puede ver las rutas, pero sí necesita saber si hay algo que
+     * pedir: sin esto, la app mostraría un botón "ver foto" que da 404.
+     */
+    protected $appends = ['tiene_foto', 'tiene_firma'];
+
+    public function getTieneFotoAttribute(): bool
+    {
+        return ! empty($this->foto_path);
+    }
+
+    public function getTieneFirmaAttribute(): bool
+    {
+        return ! empty($this->firma_path);
+    }
+
     public function paquete()
     {
         return $this->belongsTo(Paquete::class);

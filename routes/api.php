@@ -15,6 +15,7 @@ use App\Http\Controllers\TurneroController;
 use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ReclamoController;
 use App\Http\Controllers\PaqueteController;
+use App\Http\Controllers\PaqueteriaUsuarioController;
 
 /*
 |--------------------------------------------------------------------------
@@ -112,6 +113,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/paquetes', [PaqueteController::class, 'index']);
     Route::post('/paquetes', [PaqueteController::class, 'store']);
     Route::post('/paquetes/{id}/devolver', [PaqueteController::class, 'devolver']);
+    Route::post('/paquetes/{id}/observacion', [PaqueteController::class, 'observar']);
 
     // Cerrar entrega. Throttle bajo: el PIN es de 6 dígitos y el bloqueo por
     // intentos es por paquete, así que esto corta el barrido sobre muchos
@@ -123,6 +125,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // Compartidas (el controlador resuelve si es titular, operario o admin)
     Route::get('/paquetes/{id}', [PaqueteController::class, 'show']);
     Route::get('/paquetes/{id}/firma', [PaqueteController::class, 'firma']);
+    Route::get('/paquetes/{id}/foto', [PaqueteController::class, 'foto']);
+    Route::get('/paquetes/{id}/entrega-foto', [PaqueteController::class, 'entregaFoto']);
+
+    // Alta/baja de cuentas de portería. Sólo admin: acá se otorga el permiso.
+    Route::middleware('admin')->group(function () {
+        Route::get('/admin/paqueteria/usuarios', [PaqueteriaUsuarioController::class, 'index']);
+        Route::get('/admin/paqueteria/usuarios/buscar', [PaqueteriaUsuarioController::class, 'buscar']);
+        Route::post('/admin/paqueteria/usuarios', [PaqueteriaUsuarioController::class, 'store']);
+        Route::patch('/admin/paqueteria/usuarios/{id}', [PaqueteriaUsuarioController::class, 'update']);
+        Route::post('/admin/paqueteria/usuarios/{id}/password', [PaqueteriaUsuarioController::class, 'resetPassword']);
+    });
 });
 
 // Turnero de canchas

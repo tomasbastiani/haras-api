@@ -846,7 +846,7 @@ class PaqueteController extends Controller
 
     private function pedirAcuse(Paquete $paquete, PaqueteEntrega $entrega): void
     {
-        $cuando = $entrega->entregado_at->format('d/m/Y H:i');
+        $cuando = $entrega->entregado_at->clone()->setTimezone('America/Argentina/Buenos_Aires')->format('d/m/Y H:i');
 
         $this->avisarAlTitular(
             $paquete,

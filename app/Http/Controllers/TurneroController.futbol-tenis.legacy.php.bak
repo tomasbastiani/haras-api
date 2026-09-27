@@ -15,17 +15,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
-// El turnero de fútbol/tenis (por hora, con varias canchas por deporte) quedó
-// deshabilitado desde 2026-08-28 en favor de SUM y Quincho (por bloque, una
-// única unidad de cada uno). El controller viejo se conserva completo en
-// TurneroController.futbol-tenis.legacy.php.bak para reactivarlo si hace falta.
 class TurneroController extends Controller
 {
-    private const MESES_ADELANTE = 3;
-    private const MAX_TURNOS_ACTIVOS_POR_UTILIDAD = 2;
-
-    // 24hs de placeholder: falta definir las reglas específicas de cancelación
-    // de SUM y Quincho (probablemente distintas entre sí).
+    private const HORA_INICIO = 8;
+    private const HORA_FIN = 22;
+    private const DIAS_ADELANTE = 10;
+    private const MAX_TURNOS_ACTIVOS_POR_DEPORTE = 2;
     private const HORAS_MIN_CANCELACION = 24;
 
     public function canchas()
@@ -35,36 +30,10 @@ class TurneroController extends Controller
         );
     }
 
-    /**
-     * SUM y Quincho no se reservan por hora sino por bloque completo (como
-     * alquilar el salón para un evento). Los bloques son fijos por día:
-     *   - Lunes a jueves:            11 a 16hs · 19 a 00hs
-     *   - Viernes, sábado y domingo: 11 a 16hs · 19 a 03hs
-     */
-    private function bloquesParaFecha(string $fecha): array
-    {
-        $esFinDeSemanaLargo = in_array(Carbon::parse($fecha)->dayOfWeekIso, [5, 6, 7]);
-
-        return [
-            [
-                'key' => 'manana',
-                'label' => 'Mañana',
-                'hora_inicio' => '11:00',
-                'hora_fin' => '16:00',
-            ],
-            [
-                'key' => 'tarde_noche',
-                'label' => 'Tarde/Noche',
-                'hora_inicio' => '19:00',
-                'hora_fin' => $esFinDeSemanaLargo ? '03:00' : '00:00',
-            ],
-        ];
-    }
-
     public function disponibilidad(Request $request)
     {
         $request->validate([
-            'tipo' => 'required|in:sum,quincho',
+            'tipo' => 'required|in:futbol,tenis',
             'fecha' => 'required|date_format:Y-m-d',
         ]);
 
@@ -84,11 +53,13 @@ class TurneroController extends Controller
         $esHoy = $request->fecha === now()->toDateString();
         $horaActual = now()->format('H:i');
 
-        $bloques = collect($this->bloquesParaFecha($request->fecha))->map(function ($bloque) use ($reservadosPorHora, $capacidad, $esHoy, $horaActual) {
-            $reservados = $reservadosPorHora->get($bloque['hora_inicio'], 0);
+        $horarios = [];
+        for ($h = self::HORA_INICIO; $h < self::HORA_FIN; $h++) {
+            $hora = sprintf('%02d:00', $h);
+            $reservados = $reservadosPorHora->get($hora, 0);
             $disponibles = $capacidad - $reservados;
 
-            if ($esHoy && $bloque['hora_inicio'] <= $horaActual) {
+            if ($esHoy && $hora <= $horaActual) {
                 $estado = 'pasado';
             } elseif ($disponibles <= 0) {
                 $estado = 'ocupado';
@@ -96,19 +67,17 @@ class TurneroController extends Controller
                 $estado = 'disponible';
             }
 
-            return [
-                'key' => $bloque['key'],
-                'label' => $bloque['label'],
-                'horaInicio' => $bloque['hora_inicio'],
-                'horaFin' => $bloque['hora_fin'],
-                'estado' => $estado,
+            $horarios[] = [
+                'hora'        => $hora,
+                'estado'      => $estado,
                 'disponibles' => max(0, $disponibles),
+                'reservados'  => $reservados,
             ];
-        });
+        }
 
         return response()->json([
             'capacidad' => $capacidad,
-            'bloques' => $bloques,
+            'horarios'  => $horarios,
         ]);
     }
 
@@ -116,36 +85,34 @@ class TurneroController extends Controller
     {
         $request->validate([
             'email' => 'required|email|exists:users,email',
-            'tipo'  => 'required|in:sum,quincho',
+            'tipo'  => 'required|in:futbol,tenis',
             'nlote' => 'nullable|string',
             'fecha' => 'required|date_format:Y-m-d',
-            'bloque' => 'required|in:manana,tarde_noche',
+            'hora'  => 'required|date_format:H:i',
         ]);
 
         $user = User::where('email', $request->email)->first();
 
-        $bloque = collect($this->bloquesParaFecha($request->fecha))->firstWhere('key', $request->bloque);
-
-        $fechaHoraInicio = Carbon::parse("{$request->fecha} {$bloque['hora_inicio']}");
+        $fechaHoraInicio = Carbon::parse("{$request->fecha} {$request->hora}");
 
         if ($fechaHoraInicio->lt(now())) {
             return response()->json(['message' => 'No se puede reservar un turno en el pasado.'], 422);
         }
 
-        if ($fechaHoraInicio->gt(now()->addMonths(self::MESES_ADELANTE))) {
+        if ($fechaHoraInicio->gt(now()->addDays(self::DIAS_ADELANTE))) {
             return response()->json(['message' => 'Esa fecha todavía no está habilitada para reservar.'], 422);
         }
 
-        $resultado = DB::transaction(function () use ($request, $user, $bloque) {
+        $resultado = DB::transaction(function () use ($request, $user, $fechaHoraInicio) {
             $canchas = Cancha::where('tipo', $request->tipo)
                 ->where('activa', true)
                 ->orderBy('orden')
                 ->get();
 
-            // Bloqueamos todas las filas de ese tipo/fecha/bloque para evitar doble reserva por carrera de clics
+            // Bloqueamos todas las filas de ese tipo/fecha/hora para evitar doble reserva por carrera de clics
             $ocupadas = Turno::whereIn('cancha_id', $canchas->pluck('id'))
                 ->where('fecha', $request->fecha)
-                ->where('hora_inicio', $bloque['hora_inicio'])
+                ->where('hora_inicio', $request->hora)
                 ->where('estado', 'reservado')
                 ->lockForUpdate()
                 ->pluck('cancha_id');
@@ -160,7 +127,7 @@ class TurneroController extends Controller
                 ->whereHas('cancha', fn ($q) => $q->where('tipo', $request->tipo))
                 ->count();
 
-            if ($activos >= self::MAX_TURNOS_ACTIVOS_POR_UTILIDAD) {
+            if ($activos >= self::MAX_TURNOS_ACTIVOS_POR_DEPORTE) {
                 return ['error' => 'limite'];
             }
 
@@ -171,8 +138,8 @@ class TurneroController extends Controller
                 'user_id'     => $user->id,
                 'nlote'       => $request->nlote,
                 'fecha'       => $request->fecha,
-                'hora_inicio' => $bloque['hora_inicio'],
-                'hora_fin'    => $bloque['hora_fin'],
+                'hora_inicio' => $request->hora,
+                'hora_fin'    => $fechaHoraInicio->copy()->addHour()->format('H:i'),
                 'estado'      => 'reservado',
             ]);
 
@@ -180,12 +147,12 @@ class TurneroController extends Controller
         });
 
         if (isset($resultado['error']) && $resultado['error'] === 'ocupado') {
-            return response()->json(['message' => 'No quedan turnos disponibles para ese horario.'], 409);
+            return response()->json(['message' => 'No quedan canchas disponibles para ese horario.'], 409);
         }
 
         if (isset($resultado['error']) && $resultado['error'] === 'limite') {
             return response()->json([
-                'message' => 'Alcanzaste el máximo de turnos activos para esta utilidad (' . self::MAX_TURNOS_ACTIVOS_POR_UTILIDAD . ').',
+                'message' => 'Alcanzaste el máximo de turnos activos para este deporte (' . self::MAX_TURNOS_ACTIVOS_POR_DEPORTE . ').',
             ], 422);
         }
 
@@ -254,15 +221,13 @@ class TurneroController extends Controller
     {
         $request->validate([
             'fecha' => 'nullable|date_format:Y-m-d',
-            'tipo' => 'nullable|in:sum,quincho',
-            // "momento" para no chocar con `estado` (reservado/cancelado) del turno.
-            'momento' => 'nullable|in:proximos,pasados,todos',
+            'tipo' => 'nullable|in:futbol,tenis',
         ]);
 
-        $momento = $request->momento ?? 'proximos';
-
         $query = Turno::with(['cancha', 'user'])
-            ->where('estado', 'reservado');
+            ->where('estado', 'reservado')
+            ->orderBy('fecha')
+            ->orderBy('hora_inicio');
 
         if ($request->fecha) {
             $query->where('fecha', $request->fecha);
@@ -272,31 +237,12 @@ class TurneroController extends Controller
             $query->whereHas('cancha', fn ($q) => $q->where('tipo', $request->tipo));
         }
 
-        // "Pasó" se define igual que en disponibilidad(): el bloque ya arrancó,
-        // sin importar si todavía está en curso (por ej. un Tarde/Noche que
-        // sigue hasta las 3am sigue "pasado" desde que dieron las 19hs).
-        if ($momento !== 'todos') {
-            $ahora = now()->format('Y-m-d H:i:s');
-
-            if ($momento === 'pasados') {
-                $query->whereRaw('TIMESTAMP(fecha, hora_inicio) < ?', [$ahora])
-                    ->orderByDesc('fecha')
-                    ->orderByDesc('hora_inicio');
-            } else {
-                $query->whereRaw('TIMESTAMP(fecha, hora_inicio) >= ?', [$ahora])
-                    ->orderBy('fecha')
-                    ->orderBy('hora_inicio');
-            }
-        } else {
-            $query->orderBy('fecha')->orderBy('hora_inicio');
-        }
-
         $turnos = $query->get()->map(fn ($turno) => [
             'id' => $turno->id,
             'cancha' => $turno->cancha->nombre,
             'tipo' => $turno->cancha->tipo,
             'fecha' => $turno->fecha->format('Y-m-d'),
-            'hora' => substr($turno->hora_inicio, 0, 5) . ' - ' . substr($turno->hora_fin, 0, 5) . 'hs',
+            'hora' => substr($turno->hora_inicio, 0, 5),
             'nlote' => $turno->nlote,
             'propietario' => [
                 'nombre' => $turno->user->nombre,

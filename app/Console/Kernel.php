@@ -20,6 +20,14 @@ class Kernel extends ConsoleKernel
         // Acuses de recibo que el titular dejó vencer.
         $schedule->command('paqueteria:cerrar-acuses')->hourly();
 
+        // Push agrupadas del chat interno. Cada minuto porque un aviso de chat
+        // que llega diez minutos tarde ya no sirve; el comando sale enseguida si
+        // no hay nada, y el minuto de gracia evita notificar lo que la persona
+        // ya leyó en la app.
+        $schedule->command('mensajeria:notificar')
+            ->everyMinute()
+            ->withoutOverlapping();
+
         // Auditoría de la bitácora sellada. Si alguien tocó la base por fuera
         // de la app, queremos enterarnos solos y no el día que haya un reclamo.
         $schedule->command('paqueteria:verificar-cadena')

@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\User;
+use App\Models\MensajeriaMiembro;
 
 class AuthController extends Controller
 {
@@ -17,7 +18,14 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
+        // `users.email` no tiene índice único en esta base: hay cientos de emails
+        // con más de una fila. Antes esto era un `where()->first()` sin ORDER BY,
+        // o sea que cuál de esas filas autenticaba quedaba a criterio de MySQL.
+        // Ahora la elección está definida en un solo lugar (User::cuentaDeLogin),
+        // que es el mismo que usan los módulos al otorgar permisos: si cada uno
+        // resuelve el email por su cuenta, el permiso termina sobre una fila y la
+        // sesión sobre otra, y la persona no ve lo que se le habilitó.
+        $user = User::cuentaDeLogin($credentials['email']);
 
         if (!$user) {
             \Log::warning('Usuario no encontrado: ' . $credentials['email']);
@@ -45,10 +53,21 @@ class AuthController extends Controller
         // Token de acceso (Sanctum) para autenticar los siguientes requests
         $token = $user->createToken('spa')->plainTextToken;
 
+        // Acceso a la mensajería interna. Viaja en el login para que el front
+        // pueda pintar el menú sin un request extra, pero es SÓLO para eso: el
+        // permiso real lo chequea el middleware `mensajeria` en cada endpoint,
+        // porque este flag queda congelado en localStorage hasta el próximo login.
+        //
+        // Los admin entran aunque no estén en el directorio: pueden supervisar
+        // los grupos (nunca los chats directos, ver Canal::puedeLeer()).
+        $accesoMensajeria = MensajeriaMiembro::esMiembro((int) $user->id)
+            || (int) $user->admin === 1;
+
         return response()->json([
             'message' => 'Login correcto',
             'user' => $user,
             'must_change_password' => $mustChangePassword,
+            'mensajeria' => $accesoMensajeria,
             'token' => $token,
         ]);
     }

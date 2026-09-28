@@ -16,6 +16,10 @@ use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\ReclamoController;
 use App\Http\Controllers\PaqueteController;
 use App\Http\Controllers\PaqueteriaUsuarioController;
+use App\Http\Controllers\MensajeriaController;
+use App\Http\Controllers\CanalController;
+use App\Http\Controllers\MensajeController;
+use App\Http\Controllers\MensajeriaMiembroController;
 
 /*
 |--------------------------------------------------------------------------
@@ -136,6 +140,71 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('/admin/paqueteria/usuarios/{id}', [PaqueteriaUsuarioController::class, 'update']);
         Route::post('/admin/paqueteria/usuarios/{id}/password', [PaqueteriaUsuarioController::class, 'resetPassword']);
     });
+});
+
+// Mensajería interna (chat privado del personal).
+//
+// Doble puerta: `auth:sanctum` da la identidad y `mensajeria` el permiso. Este
+// último se chequea en CADA request y no una vez en el login, porque las
+// sesiones de esta app no expiran solas: validar sólo al entrar le dejaría el
+// chat abierto a un empleado dado de baja hasta que cerrara sesión.
+//
+// El autor de todo sale del token, nunca de un user_id del body (mismo criterio
+// que FCM, reclamos y paquetería).
+// Consulta de acceso. Va SIN el middleware `mensajeria` porque la contesta para
+// cualquier usuario logueado (sí/no, nunca 403): la llama el armado del menú, y
+// es lo que mantiene sincronizado el flag de localStorage en sesiones que no
+// expiran nunca. Mismo rol que /paqueteria/acceso.
+Route::middleware('auth:sanctum')->get('/mensajeria/acceso', [MensajeriaController::class, 'acceso']);
+
+Route::middleware(['auth:sanctum', 'mensajeria'])->prefix('mensajeria')->group(function () {
+    // Foto completa al entrar, y el latido del tiempo real.
+    Route::get('/bootstrap', [MensajeriaController::class, 'bootstrap']);
+    Route::get('/sync', [MensajeriaController::class, 'sync']);
+    Route::get('/directorio', [MensajeriaController::class, 'directorio']);
+    // Sólo el total de no leídos, para el badge del navbar. Es el endpoint más
+    // liviano del módulo: lo llama cada pantalla del portal, no sólo el chat.
+    Route::get('/no-leidos', [MensajeriaController::class, 'noLeidos']);
+
+    // Canales
+    Route::post('/canales', [CanalController::class, 'store']);
+    Route::post('/canales/directo', [CanalController::class, 'directo']);
+    Route::get('/canales/{id}', [CanalController::class, 'show']);
+    Route::post('/canales/{id}/miembros', [CanalController::class, 'agregarMiembros']);
+    Route::delete('/canales/{id}/miembros/{userId}', [CanalController::class, 'quitarMiembro']);
+    Route::post('/canales/{id}/archivar', [CanalController::class, 'archivar']);
+    Route::post('/canales/{id}/silenciar', [CanalController::class, 'silenciar']);
+
+    // Mensajes
+    Route::get('/canales/{id}/mensajes', [MensajeController::class, 'index']);
+    Route::post('/canales/{id}/leido', [MensajeController::class, 'leido']);
+    Route::patch('/mensajes/{id}', [MensajeController::class, 'update']);
+    Route::delete('/mensajes/{id}', [MensajeController::class, 'destroy']);
+
+    // Adjuntos. Este endpoint es la única puerta a los archivos: viven en el
+    // disco `local`, que no se sirve por HTTP, y acá se chequea el canal.
+    Route::get('/adjuntos/{id}', [MensajeController::class, 'adjunto']);
+
+    // Envío. Throttle alto: en una conversación viva la gente escribe seguido, y
+    // esto no paga por token como el chatbot de reclamos. Está sólo para que una
+    // sesión enloquecida no pueda inundar la tabla.
+    Route::middleware('throttle:60,1')->group(function () {
+        Route::post('/canales/{id}/mensajes', [MensajeController::class, 'store']);
+    });
+});
+
+// Alta/baja de empleados habilitados en la mensajería. Sólo admin: acá se otorga
+// el permiso, así que va fuera del grupo anterior (un admin que todavía no es
+// miembro tiene que poder darse de alta a sí mismo).
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::get('/admin/mensajeria/miembros', [MensajeriaMiembroController::class, 'index']);
+    Route::get('/admin/mensajeria/miembros/buscar', [MensajeriaMiembroController::class, 'buscar']);
+    Route::post('/admin/mensajeria/miembros', [MensajeriaMiembroController::class, 'store']);
+    Route::patch('/admin/mensajeria/miembros/{userId}', [MensajeriaMiembroController::class, 'update']);
+    Route::post('/admin/mensajeria/miembros/{userId}/password', [MensajeriaMiembroController::class, 'resetPassword']);
+    // Corrige el caso del email con varias filas en `users`: mueve el acceso a la
+    // fila que realmente autentica.
+    Route::post('/admin/mensajeria/miembros/{userId}/mover-a-login', [MensajeriaMiembroController::class, 'moverALogin']);
 });
 
 // Turnero de canchas

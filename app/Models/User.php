@@ -63,6 +63,53 @@ class User extends Authenticatable
         return (bool) $this->paqueteria;
     }
 
+    /**
+     * La fila de `users` con la que un email inicia sesión.
+     *
+     * Hace falta porque en esta base `users.email` NO tiene índice único: la
+     * migración lo declara, pero nunca se aplicó a la tabla legacy. Hoy hay unos
+     * 460 emails repartidos en más de 1000 filas, algunos con 7 u 8 filas.
+     *
+     * El login toma UNA sola de esas filas, así que cualquier permiso otorgado
+     * sobre otra fila del mismo email queda inerte: la sesión nunca va a tener
+     * ese id. Es exactamente lo que pasaba al habilitar el chat sobre el id
+     * equivocado —se guardaba el permiso y la persona seguía sin ver el módulo—.
+     *
+     * Este método es el ÚNICO lugar donde se decide cuál es "la" cuenta de un
+     * email, y lo usan tanto AuthController@login como el alta de la mensajería,
+     * para que no puedan divergir nunca.
+     *
+     * El `orderBy('id')` es parte del contrato, no un detalle: sin ORDER BY, qué
+     * fila devuelve MySQL es indefinido, y el permiso podría quedar apuntando a
+     * una fila distinta de la que autentica según el plan de la consulta.
+     */
+    public static function cuentaDeLogin(string $email): ?self
+    {
+        return static::where('email', $email)->orderBy('id')->first();
+    }
+
+    /** ¿Es esta fila la que se usa para iniciar sesión con su email? */
+    public function esCuentaDeLogin(): bool
+    {
+        $canonica = static::cuentaDeLogin((string) $this->email);
+
+        return $canonica && (int) $canonica->id === (int) $this->id;
+    }
+
+    /**
+     * Nombre para mostrar en pantalla, con el email como respaldo.
+     *
+     * Usa `?:` y NO `??` a propósito: en esta base `nombre` no sólo puede ser
+     * NULL, también puede ser cadena vacía —hay cuentas así, por ejemplo la de
+     * administración—, y `??` no cae al respaldo con `''`. Eso dejaba a esas
+     * cuentas sin nombre visible en el directorio de la mensajería, o sea
+     * imposibles de encontrar buscándolas.
+     */
+    public function nombreVisible(): string
+    {
+        return $this->nombre ?: ($this->email ?: 'Sin nombre');
+    }
+
     public function fcmTokens()
     {
         return $this->hasMany(UserFcmToken::class);

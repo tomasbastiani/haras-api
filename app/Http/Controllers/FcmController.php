@@ -16,7 +16,29 @@ class FcmController extends Controller
             'token' => 'required|string',
         ]);
 
-        // Guardamos el token (firstOrCreate evita duplicados directos de ese mismo token para ese usuario)
+        /**
+         * Un token de FCM identifica un NAVEGADOR, no a una persona.
+         *
+         * Si en ese dispositivo se logueó alguien antes, ya existe una fila con
+         * este mismo token apuntando al usuario anterior. Antes acá había un
+         * `$request->user()->fcmTokens()->firstOrCreate(...)`, que busca sólo
+         * entre las filas del usuario actual: no veía la del anterior y creaba
+         * otra. Así un mismo teléfono quedaba registrado para varias personas y
+         * recibía las notificaciones de todas.
+         *
+         * En un chat privado eso es peor que un duplicado: quien tenga el
+         * teléfono ve avisos de conversaciones ajenas —el nombre de quien
+         * escribió y, en un grupo, el canal—. Y en paquetería o reclamos, donde
+         * el aviso sí lleva contenido, se filtra más todavía.
+         *
+         * El dueño del dispositivo es quien está logueado ahora, así que el token
+         * se reasigna. El delete además va limpiando solo los duplicados que ya
+         * quedaron en la base, a medida que cada dispositivo se vuelve a registrar.
+         */
+        UserFcmToken::where('token', $request->token)
+            ->where('user_id', '!=', $request->user()->id)
+            ->delete();
+
         $request->user()->fcmTokens()->firstOrCreate([
             'token' => $request->token,
         ]);

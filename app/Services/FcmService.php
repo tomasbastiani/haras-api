@@ -55,7 +55,18 @@ class FcmService
                         'title' => (string)$title,
                         'body' => (string)$body,
                         'url' => (string)($data['url'] ?? 'https://harassantamaria.com.ar/login'),
-                    ]
+                    ],
+                    // Sin Urgency, web push sale con prioridad "normal" y Android
+                    // en reposo (Doze) la retiene hasta su próxima ventana de
+                    // mantenimiento: avisos que llegan con muchos minutos de
+                    // atraso, o todos juntos al desbloquear el teléfono.
+                    // TTL: pasado un día el aviso ya no sirve; que FCM lo descarte.
+                    'webpush' => [
+                        'headers' => [
+                            'Urgency' => 'high',
+                            'TTL'     => '86400',
+                        ],
+                    ],
                 ]
             ];
 

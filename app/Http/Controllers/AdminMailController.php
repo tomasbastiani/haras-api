@@ -3,127 +3,57 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\SendCustomMailRequest;
-use App\Mail\CustomAdminMail;
-use App\Models\GastosComunes;
-use App\Models\User;
-use App\Models\Moroso;
-use App\Models\InfoPago;
+use App\Models\EnvioMasivo;
+use App\Services\EnviosMasivosService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class AdminMailController extends Controller
 {
-    public function sendCustomMail(SendCustomMailRequest $request): JsonResponse
+    /**
+     * Encola el mail personalizado. Los placeholders ({nombre}, {lote},
+     * {detalledeudaxlote}, ...) se reemplazan por destinatario al momento de
+     * mandar: ver EnviosMasivosService::cuerpoPersonalizado().
+     *
+     * El mismo asunto + cuerpo + destinatarios no se encola dos veces (doble
+     * clic, reintento tras error de red): responde 409, salvo `forzar: true`.
+     */
+    public function sendCustomMail(SendCustomMailRequest $request, EnviosMasivosService $envios): JsonResponse
     {
-        $emails   = $request->input('emails', []);
-        $subject  = $request->input('subject');
-        $bodyTpl  = $request->input('body');
+        $emails  = $request->input('emails', []);
+        $subject = $request->input('subject');
+        $bodyTpl = $request->input('body');
+        $forzar  = $request->boolean('forzar');
 
-        $sent         = 0;
-        $failures     = [];
+        [$envio, $creado] = $envios->encolar(
+            EnvioMasivo::TIPO_PERSONALIZADO,
+            $envios->clavePersonalizado($subject, $bodyTpl, $emails, $forzar),
+            $emails,
+            ['asunto' => $subject, 'cuerpo' => $bodyTpl],
+            optional($request->user())->id
+        );
 
-        foreach ($emails as $email) {
-            try {
-                // ===== USERS =====
-                $user = User::where('email', $email)->first();
-                $nombre = $user?->name
-                    ?? $user?->nombre
-                    ?? '';
-
-                // ===== 1) GASTOS COMUNES (NLotes únicos) =====
-                $gastos = GastosComunes::where('email', $email)
-                    ->distinct()
-                    ->pluck('nlote')
-                    ->toArray();
-
-                $lotesNormales = $gastos; // para {lote}
-
-                // ===== 2) MOROSOS =====
-                $morosos = Moroso::where('email', $email)->get();
-                $lotesMorosos = $morosos->pluck('nlote')->unique()->toArray();
-                $nombremoroso = $morosos->first()?->nombre ?? '';
-
-                // Creamos un MAPA lote => monto (deuda)
-                $montosPorLote = [];
-                foreach ($morosos as $m) {
-                    $montosPorLote[$m->nlote] = $m->monto;
-                }
-
-                // ===== 3) INFO PAGOS: CVU y ALIAS SOLO para lotes morosos =====
-                $infoPagos = InfoPago::whereIn('nlote', $lotesMorosos)->get();
-
-                $pagosPorLote = [];
-                foreach ($infoPagos as $ip) {
-                    $pagosPorLote[$ip->nlote] = [
-                        'cvu'   => $ip->cvu ?? '',
-                        'alias' => $ip->alias ?? '',
-                    ];
-                }
-
-                // ===== 4) Construcción del TEXTO SOLO para lotes con deuda =====
-                $detallePorLote = [];
-
-                foreach ($lotesMorosos as $nl) {
-                    $monto = $montosPorLote[$nl] ?? null;
-
-                    // Si querés asegurarte que no se muestren montos "vacíos" o 0:
-                    if (empty($monto) || (float)$monto == 0.0) {
-                        continue;
-                    }
-
-                    $cvu   = $pagosPorLote[$nl]['cvu']   ?? '';
-                    $alias = $pagosPorLote[$nl]['alias'] ?? '';
-
-                    $detallePorLote[] =
-                        "Lote: $nl\n" .
-                        "Monto: $$monto\n" .
-                        "Para proceder con el pago correspondiente, le solicitamos realizar la transferencia a la siguiente cuenta bancaria: \n" .
-                        "- CVU: $cvu\n" .
-                        "- Alias: $alias\n";
-                }
-
-                $detalleFinal = implode("\n\n", $detallePorLote);
-
-                // ===== 5) PLACEHOLDERS =====
-                $bodyFinal = $this->replacePlaceholders($bodyTpl, [
-                    '{nombre}'      => $nombre,
-                    '{nombremoroso}' => $nombremoroso,
-                    '{lote}'        => implode(', ', $lotesNormales),
-                    '{lotemoroso}'  => implode(', ', $lotesMorosos),
-                    '{detalledeudaxlote}'     => $detalleFinal,
-                ]);
-
-
-                Mail::to($email)->send(new CustomAdminMail($subject, $bodyFinal));
-                $sent++;
-
-            } catch (\Throwable $e) {
-                Log::error('Error enviando mail personalizado', [
-                    'email' => $email,
-                    'error' => $e->getMessage(),
-                ]);
-
-                $failures[] = [
-                    'email' => $email,
-                    'error' => $e->getMessage(),
-                ];
-            }
+        if (! $creado) {
+            return response()->json([
+                'status'  => 'duplicado',
+                'message' => 'Este mismo mail a estos mismos destinatarios ya fue enviado o se está enviando.',
+                'envio'   => $envio->resumen(),
+            ], 409);
         }
 
         return response()->json([
             'status'  => 'success',
-            'message' => 'Proceso de envío finalizado.',
-            'data'    => [
-                'total'     => count($emails),
-                'sent'      => $sent,
-                'failures'  => $failures,
-            ],
-        ]);
+            'message' => 'Mail encolado. Se envía en los próximos minutos.',
+            'envio'   => $envio->resumen(),
+        ], 202);
     }
 
-    protected function replacePlaceholders(string $template, array $vars): string
+    /**
+     * Progreso de un envío masivo (lo consulta el front mientras se manda).
+     */
+    public function estadoEnvio(int $id): JsonResponse
     {
-        return strtr($template, $vars);
+        $envio = EnvioMasivo::findOrFail($id);
+
+        return response()->json(['envio' => $envio->resumen()]);
     }
 }

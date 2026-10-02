@@ -8,7 +8,7 @@ class SendCustomMailRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        // Ajustá si querés chequear rol admin
+        // El rol admin lo exige el middleware `admin` de la ruta (desde el token).
         return true;
     }
 
@@ -19,6 +19,8 @@ class SendCustomMailRequest extends FormRequest
             'emails.*'=> ['required', 'email'],
             'subject' => ['required', 'string', 'max:255'],
             'body'    => ['required', 'string'],
+            // Reenvío a propósito del mismo mail (ver AdminMailController).
+            'forzar'  => ['sometimes', 'boolean'],
         ];
     }
 

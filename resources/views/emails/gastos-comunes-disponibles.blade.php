@@ -54,6 +54,33 @@
                             </p>
                         @endif
 
+                        {{-- Datos de pago. Un solo bloque si todos los lotes del
+                             vecino comparten CVU/alias; si no, uno por lote. --}}
+                        @if(!empty($pagoUnico))
+                            @if(!empty($pagoUnico->cvu))
+                                <p style="margin:10px 0; color:#4b5563;">
+                                    CVU: <strong>{{ $pagoUnico->cvu }}</strong>
+                                </p>
+                            @endif
+                            @if(!empty($pagoUnico->alias))
+                                <p style="margin:10px 0; color:#4b5563;">
+                                    Alias: <strong>{{ $pagoUnico->alias }}</strong>
+                                </p>
+                            @endif
+                        @elseif(!empty($pagosPorLote) && $pagosPorLote->isNotEmpty())
+                            @foreach($pagosPorLote as $pago)
+                                <p style="margin:10px 0; color:#4b5563;">
+                                    Lote <strong>{{ $pago->nlote }}</strong><br>
+                                    @if(!empty($pago->cvu))
+                                        CVU: <strong>{{ $pago->cvu }}</strong><br>
+                                    @endif
+                                    @if(!empty($pago->alias))
+                                        Alias: <strong>{{ $pago->alias }}</strong>
+                                    @endif
+                                </p>
+                            @endforeach
+                        @endif
+
                         <p style="margin:16px 0; color:#4b5563;">
                             Puede acceder al portal de propietarios para consultar el detalle,
                             descargar la documentación y ver el historial de sus gastos comunes.

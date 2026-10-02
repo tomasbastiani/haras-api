@@ -28,6 +28,18 @@ class Kernel extends ConsoleKernel
             ->everyMinute()
             ->withoutOverlapping();
 
+        // Mails masivos encolados (aviso de gastos comunes, mail personalizado).
+        // De a tandas para que un envío grande nunca se corte por timeout.
+        $schedule->command('envios:procesar')
+            ->everyMinute()
+            ->withoutOverlapping();
+
+        // Emails que Postmark suprimió por rebote: se marcan en users y los
+        // envíos masivos los saltean.
+        $schedule->command('mail:sincronizar-rebotes')
+            ->dailyAt('04:00')
+            ->appendOutputTo(storage_path('logs/mail-rebotes.log'));
+
         // Auditoría de la bitácora sellada. Si alguien tocó la base por fuera
         // de la app, queremos enterarnos solos y no el día que haya un reclamo.
         $schedule->command('paqueteria:verificar-cadena')

@@ -98,6 +98,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Stream de Postmark para envíos masivos
+    |--------------------------------------------------------------------------
+    |
+    | Los mails masivos (aviso de gastos comunes, mail personalizado) salen por
+    | el stream "broadcast" de Postmark y no por el transaccional. Dos razones:
+    |
+    | - En broadcast Postmark agrega solo el link de baja al pie y los headers
+    |   List-Unsubscribe de un clic que exigen Gmail y Yahoo a los envíos
+    |   masivos. Es lo que más baja las quejas de spam.
+    | - Si un envío masivo sale mal y Postmark frena ese stream, los mails
+    |   transaccionales (reset de contraseña, turnos) siguen saliendo.
+    |
+    | Quien se da de baja deja de recibir SÓLO lo que sale por broadcast.
+    | Vacío = no se manda el header y todo sale por el stream por defecto.
+    |
+    */
+
+    'stream_masivo' => env('MAIL_STREAM_MASIVO', 'broadcast'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Envíos masivos encolados
+    |--------------------------------------------------------------------------
+    |
+    | El comando `envios:procesar` corre cada minuto y manda hasta `por_minuto`
+    | mails por pasada. Con 600 destinatarios y 50 por minuto, un aviso tarda
+    | unos 12 minutos en salir entero: a cambio, nunca se corta por timeout.
+    | Un destinatario que falla se reintenta en las pasadas siguientes hasta
+    | `max_intentos`, y después queda en estado `error`.
+    |
+    */
+
+    'masivos' => [
+        'por_minuto'   => (int) env('MAIL_MASIVOS_POR_MINUTO', 50),
+        'max_intentos' => (int) env('MAIL_MASIVOS_MAX_INTENTOS', 3),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Markdown Mail Settings
     |--------------------------------------------------------------------------
     |

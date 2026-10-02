@@ -22,7 +22,10 @@ return [
     ],
 
     'postmark' => [
-        'token' => env('POSTMARK_TOKEN'),
+        // Token del servidor de Postmark, para su API (lista de suprimidas). En
+        // SMTP de Postmark el usuario ES ese token, así que si no hay uno
+        // propio se usa MAIL_USERNAME y prod no necesita una variable nueva.
+        'token' => env('POSTMARK_TOKEN', env('MAIL_USERNAME')),
     ],
 
     'ses' => [

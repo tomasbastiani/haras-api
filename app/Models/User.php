@@ -48,8 +48,51 @@ class User extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'email_rebotado_at' => 'datetime',
         'paqueteria'        => 'boolean',
     ];
+
+    protected static function booted()
+    {
+        // La marca de rebote es de la dirección, no de la persona: si se le
+        // cambia el email, la dirección nueva arranca limpia. Si también
+        // rebota, la próxima sincronización con Postmark la vuelve a marcar.
+        // (Sólo cubre cambios por Eloquent; un DB::table('users')->update()
+        // no pasa por acá.)
+        static::updating(function (User $user) {
+            if ($user->isDirty('email')) {
+                $user->email_rebotado_at = null;
+            }
+        });
+    }
+
+    /**
+     * De una lista de direcciones, las que pertenecen a algún usuario marcado
+     * como rebotado. Comparación sin mayúsculas ni espacios, en minúscula.
+     *
+     * @param  string[]  $emails
+     * @return string[]
+     */
+    public static function emailsRebotados(array $emails): array
+    {
+        $normalizados = array_values(array_unique(array_map(
+            fn ($e) => strtolower(trim((string) $e)),
+            $emails
+        )));
+
+        if (empty($normalizados)) {
+            return [];
+        }
+
+        return static::query()
+            ->whereNotNull('email_rebotado_at')
+            ->whereIn(\Illuminate\Support\Facades\DB::raw('LOWER(TRIM(email))'), $normalizados)
+            ->selectRaw('LOWER(TRIM(email)) as email_norm')
+            ->pluck('email_norm')
+            ->unique()
+            ->values()
+            ->all();
+    }
 
     /**
      * Cuenta dedicada de paquetería (portería): entra directo a la oficina y no

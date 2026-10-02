@@ -22,13 +22,34 @@ class FacturaController extends Controller
         return response()->json($facturas);
     }
 
-    public function listarTodos()
+    // Paginado y filtrado en la base: la tabla tiene una fila por lote y por
+    // período (cientos de miles) y traerla entera agotaba los 128 MB de PHP.
+    public function listarTodos(Request $request)
     {
-        $facturas = DB::connection('hsm')
-            ->table('gastoscomunes')
-            ->select('*')
+        $validated = $request->validate([
+            'periodo' => 'nullable|numeric',
+            'email' => 'nullable|string|max:255',
+            'lote' => 'nullable|string|max:50',
+            'carta' => 'nullable|string|max:255',
+            'gastocomun' => 'nullable|string|max:255',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $query = DB::connection('hsm')->table('gastoscomunes');
+
+        if (!empty($validated['periodo'])) {
+            $query->where('numero', $validated['periodo']);
+        }
+        foreach (['email' => 'email', 'lote' => 'nlote', 'carta' => 'carta', 'gastocomun' => 'gastocomun'] as $param => $columna) {
+            if (!empty($validated[$param])) {
+                $query->where($columna, 'like', '%' . addcslashes($validated[$param], '%_\\') . '%');
+            }
+        }
+
+        $facturas = $query
             ->orderBy('numero', 'desc')
-            ->get();
+            ->orderBy('id')
+            ->paginate($validated['per_page'] ?? 20);
 
         return response()->json($facturas);
     }

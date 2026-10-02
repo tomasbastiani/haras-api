@@ -37,38 +37,72 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 });
 
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/change-password', [AuthController::class, 'changePassword']);
-Route::get('/gastoscomunes/{email}', [FacturaController::class, 'buscarPorDni']);
-Route::get('/facturas-todas', [FacturaController::class, 'listarTodos']);
-Route::post('/gastos/agregar', [FacturaController::class, 'agregarGasto']);
-Route::get('/gastos/periodos', [FacturaController::class, 'obtenerPeriodos']);
-Route::delete('/gastos/eliminar/{numero}', [FacturaController::class, 'eliminarPorPeriodo']);
-Route::post('/update-gasto', [FacturaController::class, 'updateGasto']);
-Route::get('/mis-lotes/{email}', [FacturaController::class, 'getLotesPorEmail']);
-Route::post('/update-email-lote', [FacturaController::class, 'updateEmailLote']);
-Route::post('/create-user', [FacturaController::class, 'createUserIfNotExists']);
-Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmail']);
-Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
-Route::get('/gastos/pdf/{numero}/{nlote}', [FacturaController::class, 'verPDF']);
-Route::post('/enviar-contacto', [ContactoController::class, 'enviar']);
-Route::post('/importar-gastos', [ImportadorController::class, 'importarGastos']);
-Route::post('/importar-morosos', [ImportadorController::class, 'importarMorosos']);
-Route::get('/gastoscomunes', [ImportadorController::class, 'obtenerGastos']);
-Route::get('/morosos', [ImportadorController::class, 'obtenerMorosos']);
 
-Route::get('/lotes-por-user/{email}', [FacturaController::class, 'getLotesPorUser']);
-Route::get('/cartas', [FacturaController::class, 'getCartas']);
+// Rutas que usan los vecinos (y también el admin). Antes eran públicas: sin
+// login se podían leer los lotes de cualquiera, cambiar el email de un lote,
+// crear usuarios o subir/borrar archivos. Ojo: varias todavía toman el email
+// de la URL o del body y no del token (pendiente, ver CLAUDE.md).
+Route::middleware('auth:sanctum')->group(function () {
+    // Perfil (Profile.vue)
+    Route::post('/change-password', [AuthController::class, 'changePassword']);
+    Route::get('/mis-lotes/{email}', [FacturaController::class, 'getLotesPorEmail']);
+    // Profile.vue (el vecino cambia el email de su lote) y EditUser.vue (admin)
+    Route::post('/update-email-lote', [FacturaController::class, 'updateEmailLote']);
+    Route::post('/create-user', [FacturaController::class, 'createUserIfNotExists']);
+    Route::get('/verificar-email/{email}', [FacturaController::class, 'verificarEmail']);
 
-// CRUD Archivos
-Route::post('/archivos', [ArchivoController::class, 'store']);
-Route::get('/archivos', [ArchivoController::class, 'index']);
-Route::delete('/archivos/{id}', [ArchivoController::class, 'destroy']);
-Route::get('/archivos/{id}/download', [ArchivoController::class, 'download']);
-Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
+    // Gastos comunes del vecino (GastosComunes.vue)
+    Route::get('/gastoscomunes/{email}', [FacturaController::class, 'buscarPorDni']);
+    Route::get('/gastos/pdf/{numero}/{nlote}', [FacturaController::class, 'verPDF']);
+
+    // Archivos (Files.vue: el vecino sube, lista, descarga y borra los suyos)
+    Route::get('/lotes-por-user/{email}', [FacturaController::class, 'getLotesPorUser']);
+    Route::get('/cartas', [FacturaController::class, 'getCartas']);
+    Route::post('/archivos', [ArchivoController::class, 'store']);
+    Route::delete('/archivos/{id}', [ArchivoController::class, 'destroy']);
+    Route::get('/archivos/{id}/download', [ArchivoController::class, 'download']);
+    Route::get('/archivos/user/{user}', [ArchivoController::class, 'indexByUser']);
+});
+
+// Administración de gastos comunes, usuarios y archivos. Sólo admin. Antes eran
+// públicas: sin login se podía bajar la lista de emails de todos los vecinos o
+// crear, modificar y borrar períodos enteros de expensas.
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    // GastosComunes.vue (bloque admin) y Listado.vue
+    Route::get('/facturas-todas', [FacturaController::class, 'listarTodos']);
+    Route::get('/gastos/periodos', [FacturaController::class, 'obtenerPeriodos']);
+    Route::post('/gastos/agregar', [FacturaController::class, 'agregarGasto']);
+    Route::delete('/gastos/eliminar/{numero}', [FacturaController::class, 'eliminarPorPeriodo']);
+    Route::post('/update-gasto', [FacturaController::class, 'updateGasto']);
+    // EditUser.vue y NotificationsCenter.vue
+    Route::get('/emails-por-lote', [FacturaController::class, 'obtenerEmailsPorLote']);
+    // Todos los archivos de todos. Ninguna pantalla lo usa hoy.
+    Route::get('/archivos', [ArchivoController::class, 'index']);
+});
+// Formulario de contacto. Con login: sin él, cualquiera podía usar el servidor
+// para mandar mails desde nuestro dominio (to/subject/message vienen del body).
+Route::middleware('auth:sanctum')->post('/enviar-contacto', [ContactoController::class, 'enviar']);
+
+// Importadores de gastos comunes / morosos y aviso masivo por mail. Sólo admin:
+// las listas tienen email, nombre, lote y CVU de cada vecino, el import las
+// reemplaza enteras, y el aviso manda un mail a todos. Sin esta puerta
+// cualquiera podía leerlas, pisarlas o usar el servidor para mandar mails.
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::post('/importar-gastos', [ImportadorController::class, 'importarGastos']);
+    Route::get('/importar-gastos/plantilla', [ImportadorController::class, 'plantillaGastos']);
+    Route::post('/importar-morosos', [ImportadorController::class, 'importarMorosos']);
+    Route::get('/gastoscomunes', [ImportadorController::class, 'obtenerGastos']);
+    Route::get('/morosos', [ImportadorController::class, 'obtenerMorosos']);
+    Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
+});
 
 
-Route::post('/gastos/notificar', [GastosNotificacionesController::class, 'notificar']);
-Route::post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
+// Mail personalizado masivo. Sólo admin: antes estaba abierto y cualquiera, sin
+// cuenta, podía mandar a una lista ilimitada de direcciones con asunto y texto
+// libres desde nuestro dominio.
+Route::middleware(['auth:sanctum', 'admin'])->post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
+// Progreso de un envío masivo encolado (gastos comunes o personalizado).
+Route::middleware(['auth:sanctum', 'admin'])->get('/admin/envios-masivos/{id}', [AdminMailController::class, 'estadoEnvio'])->whereNumber('id');
 
 // Notificaciones / FCM: requieren sesión válida (token Sanctum). El usuario se
 // identifica por el token, nunca por un email enviado en el body (evita IDOR).
@@ -207,13 +241,17 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::post('/admin/mensajeria/miembros/{userId}/mover-a-login', [MensajeriaMiembroController::class, 'moverALogin']);
 });
 
-// Turnero de canchas
-Route::get('/turnero/canchas', [TurneroController::class, 'canchas']);
-Route::get('/turnero/disponibilidad', [TurneroController::class, 'disponibilidad']);
-Route::post('/turnero/reservar', [TurneroController::class, 'reservar']);
-Route::post('/turnero/cancelar/{id}', [TurneroController::class, 'cancelar']);
-Route::get('/turnero/mis-turnos', [TurneroController::class, 'misTurnos']);
-Route::get('/turnero/admin/turnos', [TurneroController::class, 'adminTurnos']);
+// Turnero (SUM / Quincho). Con login: antes cualquiera sin cuenta podía
+// reservar, cancelar o listar los turnos de todos.
+Route::middleware('auth:sanctum')->group(function () {
+    Route::get('/turnero/canchas', [TurneroController::class, 'canchas']);
+    Route::get('/turnero/disponibilidad', [TurneroController::class, 'disponibilidad']);
+    Route::post('/turnero/reservar', [TurneroController::class, 'reservar']);
+    // Turnero.vue (vecino) y TurneroAdmin.vue (admin) usan la misma ruta.
+    Route::post('/turnero/cancelar/{id}', [TurneroController::class, 'cancelar']);
+    Route::get('/turnero/mis-turnos', [TurneroController::class, 'misTurnos']);
+});
+Route::middleware(['auth:sanctum', 'admin'])->get('/turnero/admin/turnos', [TurneroController::class, 'adminTurnos']);
 
 // Limitar un poco el spam en forgot
 Route::middleware('throttle:5,1')->group(function () {
@@ -221,11 +259,6 @@ Route::middleware('throttle:5,1')->group(function () {
 });
 
 Route::post('/password/reset', [ForgotPasswordController::class, 'resetPassword']);
-
-Route::get('/clear-cache-temp', function () {
-    Artisan::call('optimize:clear');
-    return 'Cache cleared';
-});
 
 // ⚠️ RUTA TEMPORAL PARA MIGRACIÓN DE PASSWORDS
 // Visitar: https://harassantamaria.com.ar/api/public/index.php/api/run-migration-hash-2025

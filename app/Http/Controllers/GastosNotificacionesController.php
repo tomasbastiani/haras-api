@@ -2,113 +2,62 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\EnvioMasivo;
 use App\Models\GastosComunes;
-use App\Notifications\GastosComunesDisponiblesNotification;
+use App\Services\EnviosMasivosService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
 class GastosNotificacionesController extends Controller
 {
-    public function notificar(Request $request): JsonResponse
+    /**
+     * Encola el aviso "Nuevos gastos comunes disponibles" para todos los de
+     * gastoscomunes_notificaciones. No manda nada acá: lo hace el comando
+     * `envios:procesar` de a tandas.
+     *
+     * Un aviso por período. Si ya se encoló el del período actual, responde 409
+     * con su progreso, salvo que venga `forzar: true` (reenvío a propósito).
+     *
+     * El permiso lo da el middleware `admin` de la ruta, a partir del token.
+     */
+    public function notificar(Request $request, EnviosMasivosService $envios): JsonResponse
     {
-        // 1) Check admin simple
-        $isAdmin = filter_var($request->input('is_admin'), FILTER_VALIDATE_BOOLEAN);
-
-        if (! $isAdmin) {
-            return response()->json([
-                'message' => 'No autorizado.',
-            ], 403);
-        }
-
-        // 2) Periodo opcional (se lo pasamos a la notificación para que lo use en el mail)
         $periodo = GastosComunes::max('numero');
+        $periodo = $periodo !== null ? (string) $periodo : null;
+        $forzar  = $request->boolean('forzar');
 
-        /**
-         * ==========================
-         *  MODO PRUEBA (COMENTADO)
-         * ==========================
-         */
-
-
-
-
-        // $testEmails = [
-        //     'tomas.bastiani@hotmail.com',
-        //     'totoprofly89@gmail.com',
-        // ];
-
-        // Log::info('Enviando emails de PRUEBA (Gastos Comunes)', [
-        //     'periodo' => $periodo,
-        //     'emails'  => $testEmails,
-        //     'total'   => count($testEmails),
-        // ]);
-
-        // // Notification::route('mail', $testEmails)
-        // //     ->notify(new GastosComunesDisponiblesNotification($periodo));
-
-        // foreach ($testEmails as $email) {
-        //     Notification::route('mail', $email)
-        //         ->notify(new GastosComunesDisponiblesNotification($periodo));
-        // }
-
-        // return response()->json([
-        //     'message' => 'Correos de prueba enviados correctamente.',
-        // ]);
-
-
-
-
-
-
-        /**
-         * ==========================
-         *  MODO REAL: Mails desde BD
-         * ==========================
-         */
-
-
-        // Traer emails desde la tabla gastoscomunes_notificaciones, SIN duplicados y sin nulos/vacíos
-        $query = DB::table('gastoscomunes_notificaciones')
+        $emails = DB::table('gastoscomunes_notificaciones')
             ->whereNotNull('email')
-            ->where('email', '<>', '');
-
-        $emails = $query
+            ->where('email', '<>', '')
             ->distinct()
             ->pluck('email')
-            ->toArray();
+            ->all();
 
         if (empty($emails)) {
-            Log::warning('No se encontraron emails en gastoscomunes para enviar notificación de Gastos Comunes.', [
-                'periodo' => $periodo,
-            ]);
-
             return response()->json([
                 'message' => 'No se encontraron emails para enviar.',
             ], 404);
         }
 
-        Log::info('Enviando emails REALES (Gastos Comunes)', [
-            'periodo' => $periodo,
-            'total'   => count($emails),
-            'emails'  => $emails
-        ]);
+        [$envio, $creado] = $envios->encolar(
+            EnvioMasivo::TIPO_GASTOS_COMUNES,
+            $envios->claveGastos($periodo, $forzar),
+            $emails,
+            ['periodo' => $periodo, 'asunto' => 'Nuevos gastos comunes disponibles'],
+            optional($request->user())->id
+        );
 
-        // Enviar notificación a todos los emails reales
-        // Notification::route('mail', $emails)
-        //     ->notify(new GastosComunesDisponiblesNotification($periodo));
-
-        foreach ($emails as $email) {
-            Notification::route('mail', $email)
-                ->notify(new GastosComunesDisponiblesNotification($periodo));
+        if (! $creado) {
+            return response()->json([
+                'message' => "El aviso del período {$periodo} ya fue enviado o se está enviando.",
+                'envio'   => $envio->resumen(),
+            ], 409);
         }
 
-
         return response()->json([
-            'message' => 'Correos enviados correctamente.',
-            'total'   => count($emails),
-        ]);
+            'message' => 'Aviso encolado. Se envía en los próximos minutos.',
+            'envio'   => $envio->resumen(),
+        ], 202);
     }
 }

@@ -19,6 +19,15 @@ class CustomAdminMail extends Mailable
         $this->bodyContent = $bodyContent;
 
         $this->subject($subjectText);
+
+        // Envío masivo: va por el stream broadcast de Postmark, que agrega el
+        // link de baja (ver config/mail.php, stream_masivo).
+        $stream = config('mail.stream_masivo');
+        if ($stream) {
+            $this->withSymfonyMessage(function ($message) use ($stream) {
+                $message->getHeaders()->addTextHeader('X-PM-Message-Stream', $stream);
+            });
+        }
     }
 
     public function build()

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\GastosComunesDisponiblesNotification;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
@@ -23,28 +24,62 @@ use Illuminate\Support\Facades\Notification;
  */
 class EnviosMasivosService
 {
+    // Resultados de encolar().
+    public const CREADO    = 'creado';
+    // Ya hubo un envío de este aviso (terminado): se ofrece "Reenviar".
+    public const DUPLICADO = 'duplicado';
+    // Hay un envío de este aviso en curso o pausado: hay que reanudarlo o
+    // cancelarlo antes de reenviar, si no, los que faltan recibirían dos.
+    public const EN_CURSO  = 'en_curso';
+
     /**
      * Crea el envío y sus destinatarios.
      *
-     * Las direcciones marcadas como rebotadas quedan en estado `omitido` desde
-     * el arranque: así el admin ve cuántas se saltearon y por qué.
+     * `$claveBase` identifica el aviso (p. ej. gastos del período 212). Sin
+     * `$reenviar`, un segundo intento devuelve el envío existente. Con
+     * `$reenviar` se crea un envío nuevo que SÓLO manda a quienes todavía no
+     * lo recibieron: los que ya lo tienen quedan como `ya_recibido`. Así
+     * frenar, corregir el Excel y volver a mandar nunca duplica.
+     *
+     * Desde el arranque quedan `omitido` las direcciones rebotadas: las
+     * marcadas en users y las que Postmark tiene bloqueadas (se le pregunta en
+     * el momento, porque muchas de la lista de gastos no tienen usuario).
      *
      * @param  string[]  $emails
-     * @return array{0: EnvioMasivo, 1: bool}  [envío, creado]. Si la clave ya
-     *         existía devuelve el envío existente y `false`: no se encola nada.
+     * @return array{0: EnvioMasivo, 1: string}  [envío, CREADO|DUPLICADO|EN_CURSO]
      */
-    public function encolar(string $tipo, string $clave, array $emails, array $datos, ?int $userId): array
+    public function encolar(string $tipo, string $claveBase, bool $reenviar, array $emails, array $datos, ?int $userId): array
     {
         $emails = $this->normalizar($emails);
 
-        if ($existente = EnvioMasivo::where('clave', $clave)->first()) {
-            return [$existente, false];
+        $anteriores = EnvioMasivo::where('clave', $claveBase)
+            ->orWhere('clave', 'like', $claveBase . ':%')
+            ->orderByDesc('id')
+            ->get();
+
+        if ($enCurso = $anteriores->firstWhere('finalizado_at', null)) {
+            return [$enCurso, self::EN_CURSO];
+        }
+        if ($anteriores->isNotEmpty() && ! $reenviar) {
+            return [$anteriores->first(), self::DUPLICADO];
         }
 
-        $rebotados = array_flip(User::emailsRebotados($emails));
+        $clave = $anteriores->isEmpty() ? $claveBase : $claveBase . ':' . now()->format('YmdHis');
+
+        $yaRecibieron = $anteriores->isEmpty() ? [] : array_flip(
+            EnvioMasivoDestinatario::whereIn('envio_masivo_id', $anteriores->pluck('id'))
+                ->where('estado', EnvioMasivoDestinatario::ENVIADO)
+                ->pluck('email')
+                ->all()
+        );
+
+        $rebotados = array_flip(array_merge(
+            User::emailsRebotados($emails),
+            $this->bloqueadosEnPostmark()
+        ));
 
         try {
-            $envio = DB::transaction(function () use ($tipo, $clave, $emails, $datos, $userId, $rebotados) {
+            $envio = DB::transaction(function () use ($tipo, $clave, $emails, $datos, $userId, $rebotados, $yaRecibieron) {
                 $envio = EnvioMasivo::create([
                     'tipo'       => $tipo,
                     'clave'      => $clave,
@@ -56,16 +91,22 @@ class EnviosMasivosService
                 ]);
 
                 $ahora = now();
-                $filas = array_map(fn ($email) => [
-                    'envio_masivo_id' => $envio->id,
-                    'email'           => $email,
-                    'estado'          => isset($rebotados[$email])
-                        ? EnvioMasivoDestinatario::OMITIDO
-                        : EnvioMasivoDestinatario::PENDIENTE,
-                    'detalle'         => isset($rebotados[$email]) ? 'Email marcado como rebotado' : null,
-                    'created_at'      => $ahora,
-                    'updated_at'      => $ahora,
-                ], $emails);
+                $filas = array_map(function ($email) use ($envio, $ahora, $rebotados, $yaRecibieron) {
+                    [$estado, $detalle] = isset($yaRecibieron[$email])
+                        ? [EnvioMasivoDestinatario::YA_RECIBIDO, 'Ya lo recibió en un envío anterior']
+                        : (isset($rebotados[$email])
+                            ? [EnvioMasivoDestinatario::OMITIDO, 'Email rebotado o bloqueado en Postmark']
+                            : [EnvioMasivoDestinatario::PENDIENTE, null]);
+
+                    return [
+                        'envio_masivo_id' => $envio->id,
+                        'email'           => $email,
+                        'estado'          => $estado,
+                        'detalle'         => $detalle,
+                        'created_at'      => $ahora,
+                        'updated_at'      => $ahora,
+                    ];
+                }, $emails);
 
                 foreach (array_chunk($filas, 500) as $tanda) {
                     EnvioMasivoDestinatario::insert($tanda);
@@ -77,44 +118,111 @@ class EnviosMasivosService
             // Dos clics casi simultáneos: el segundo choca contra la clave
             // única. Devolvemos el envío que ganó.
             if ($existente = EnvioMasivo::where('clave', $clave)->first()) {
-                return [$existente, false];
+                return [$existente, self::EN_CURSO];
             }
             throw $e;
         }
 
-        if ($envio->destinatarios()->where('estado', EnvioMasivoDestinatario::PENDIENTE)->doesntExist()) {
-            $envio->update(['finalizado_at' => now()]);
-        }
+        $this->cerrarTerminados([$envio->id]);
 
         Log::info('Envío masivo encolado', [
-            'id' => $envio->id, 'tipo' => $tipo, 'clave' => $clave,
-            'total' => count($emails), 'omitidos' => count($rebotados), 'por' => $userId,
+            'id' => $envio->id, 'tipo' => $tipo, 'clave' => $clave, 'reenvio' => $anteriores->isNotEmpty(),
+            'total' => count($emails), 'por' => $userId,
         ]);
 
-        return [$envio, true];
+        return [$envio, self::CREADO];
     }
 
     /**
-     * Clave del aviso de gastos comunes: uno por período. Con `forzar` se
-     * genera una clave nueva para reenviar a propósito.
+     * Clave del aviso de gastos comunes: uno por período.
      */
-    public function claveGastos(?string $periodo, bool $forzar = false): string
+    public function claveGastos(?string $periodo): string
     {
-        return 'gastos_comunes:' . ($periodo ?? 'sin-periodo') . ($forzar ? ':' . now()->format('YmdHis') : '');
+        return 'gastos_comunes:' . ($periodo ?? 'sin-periodo');
     }
 
     /**
      * Clave del mail personalizado: mismo asunto + cuerpo + destinatarios =
-     * mismo envío. Frena el doble clic y el "reintentar" después de un error
+     * mismo aviso. Frena el doble clic y el "reintentar" después de un error
      * de red, que eran los que duplicaban.
      */
-    public function clavePersonalizado(string $asunto, string $cuerpo, array $emails, bool $forzar = false): string
+    public function clavePersonalizado(string $asunto, string $cuerpo, array $emails): string
     {
         $emails = $this->normalizar($emails);
         sort($emails);
 
-        return 'personalizado:' . sha1($asunto . "\0" . $cuerpo . "\0" . implode(',', $emails))
-            . ($forzar ? ':' . now()->format('YmdHis') : '');
+        return 'personalizado:' . sha1($asunto . "\0" . $cuerpo . "\0" . implode(',', $emails));
+    }
+
+    /**
+     * Pausar / reanudar / cancelar un envío en curso.
+     *
+     * Pausar no corta la tanda que se está mandando en ese momento (hasta
+     * `mail.masivos.por_minuto` mails): frena las siguientes.
+     */
+    public function cambiarEstado(EnvioMasivo $envio, string $accion): void
+    {
+        $q = EnvioMasivoDestinatario::where('envio_masivo_id', $envio->id);
+
+        switch ($accion) {
+            case 'pausar':
+                (clone $q)->where('estado', EnvioMasivoDestinatario::PENDIENTE)
+                    ->update(['estado' => EnvioMasivoDestinatario::PAUSADO, 'updated_at' => now()]);
+                break;
+
+            case 'reanudar':
+                (clone $q)->where('estado', EnvioMasivoDestinatario::PAUSADO)
+                    ->update(['estado' => EnvioMasivoDestinatario::PENDIENTE, 'updated_at' => now()]);
+                $envio->update(['finalizado_at' => null]);
+                break;
+
+            case 'cancelar':
+                (clone $q)->whereIn('estado', [EnvioMasivoDestinatario::PENDIENTE, EnvioMasivoDestinatario::PAUSADO])
+                    ->update(['estado' => EnvioMasivoDestinatario::CANCELADO, 'detalle' => 'Cancelado por el admin', 'updated_at' => now()]);
+                break;
+
+            default:
+                throw new \InvalidArgumentException("Acción desconocida: {$accion}");
+        }
+
+        $this->cerrarTerminados([$envio->id]);
+
+        Log::info('Envío masivo: ' . $accion, ['id' => $envio->id]);
+    }
+
+    /**
+     * Direcciones que Postmark tiene bloqueadas (rebote, queja de spam o baja),
+     * en los dos streams. Si Postmark no responde se sigue sin ellas: Postmark
+     * igual no les manda, esto es para no intentarlo y que el admin las vea.
+     *
+     * @return string[]
+     */
+    private function bloqueadosEnPostmark(): array
+    {
+        $token = config('services.postmark.token');
+        if (! $token || config('mail.default') !== 'smtp' || ! str_contains((string) config('mail.mailers.smtp.host'), 'postmark')) {
+            return [];
+        }
+
+        $out = [];
+        foreach (array_unique(array_filter(['outbound', config('mail.stream_masivo')])) as $stream) {
+            try {
+                $resp = Http::withHeaders([
+                    'Accept'                  => 'application/json',
+                    'X-Postmark-Server-Token' => $token,
+                ])->timeout(10)->get("https://api.postmarkapp.com/message-streams/{$stream}/suppressions/dump");
+
+                foreach ((array) $resp->json('Suppressions') as $s) {
+                    if (! empty($s['EmailAddress'])) {
+                        $out[] = strtolower(trim($s['EmailAddress']));
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('No se pudo leer la lista de bloqueados de Postmark', ['stream' => $stream, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -202,8 +310,9 @@ class EnviosMasivosService
     private function cerrarTerminados(array $envioIds): void
     {
         foreach ($envioIds as $id) {
+            // Pausado no es terminado: queda abierto hasta reanudar o cancelar.
             $quedan = EnvioMasivoDestinatario::where('envio_masivo_id', $id)
-                ->where('estado', EnvioMasivoDestinatario::PENDIENTE)
+                ->whereIn('estado', [EnvioMasivoDestinatario::PENDIENTE, EnvioMasivoDestinatario::PAUSADO])
                 ->exists();
 
             if (! $quedan) {

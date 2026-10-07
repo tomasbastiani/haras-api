@@ -103,6 +103,9 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
 Route::middleware(['auth:sanctum', 'admin'])->post('/admin/enviar-mail-personalizado', [AdminMailController::class, 'sendCustomMail']);
 // Progreso de un envío masivo encolado (gastos comunes o personalizado).
 Route::middleware(['auth:sanctum', 'admin'])->get('/admin/envios-masivos/{id}', [AdminMailController::class, 'estadoEnvio'])->whereNumber('id');
+// Pausar / reanudar / cancelar un envío masivo.
+Route::middleware(['auth:sanctum', 'admin'])->post('/admin/envios-masivos/{id}/{accion}', [AdminMailController::class, 'accionEnvio'])
+    ->whereNumber('id')->whereIn('accion', ['pausar', 'reanudar', 'cancelar']);
 
 // Notificaciones / FCM: requieren sesión válida (token Sanctum). El usuario se
 // identifica por el token, nunca por un email enviado en el body (evita IDOR).

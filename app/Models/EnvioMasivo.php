@@ -36,16 +36,26 @@ class EnvioMasivo extends Model
             ->groupBy('estado')
             ->pluck('n', 'estado');
 
+        $pendientes = (int) ($porEstado['pendiente'] ?? 0);
+        $pausados   = (int) ($porEstado['pausado'] ?? 0);
+
         return [
             'id'            => $this->id,
             'tipo'          => $this->tipo,
             'periodo'       => $this->periodo,
             'asunto'        => $this->asunto,
             'total'         => $this->total,
-            'pendientes'    => (int) ($porEstado['pendiente'] ?? 0),
+            'pendientes'    => $pendientes,
             'enviados'      => (int) ($porEstado['enviado'] ?? 0),
             'errores'       => (int) ($porEstado['error'] ?? 0),
             'omitidos'      => (int) ($porEstado['omitido'] ?? 0),
+            'ya_recibidos'  => (int) ($porEstado['ya_recibido'] ?? 0),
+            'pausados'      => $pausados,
+            'cancelados'    => (int) ($porEstado['cancelado'] ?? 0),
+            // en_curso | pausado | finalizado
+            'estado'        => $this->finalizado_at !== null
+                ? 'finalizado'
+                : ($pausados > 0 && $pendientes === 0 ? 'pausado' : 'en_curso'),
             'finalizado'    => $this->finalizado_at !== null,
             'finalizado_at' => optional($this->finalizado_at)->toIso8601String(),
             'creado_at'     => optional($this->created_at)->toIso8601String(),

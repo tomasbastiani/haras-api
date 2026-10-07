@@ -15,7 +15,8 @@ class AdminMailController extends Controller
      * mandar: ver EnviosMasivosService::cuerpoPersonalizado().
      *
      * El mismo asunto + cuerpo + destinatarios no se encola dos veces (doble
-     * clic, reintento tras error de red): responde 409, salvo `forzar: true`.
+     * clic, reintento tras error de red): responde 409. Con `forzar: true` se
+     * reenvía sólo a quienes todavía no lo recibieron.
      */
     public function sendCustomMail(SendCustomMailRequest $request, EnviosMasivosService $envios): JsonResponse
     {
@@ -24,19 +25,30 @@ class AdminMailController extends Controller
         $bodyTpl = $request->input('body');
         $forzar  = $request->boolean('forzar');
 
-        [$envio, $creado] = $envios->encolar(
+        [$envio, $resultado] = $envios->encolar(
             EnvioMasivo::TIPO_PERSONALIZADO,
-            $envios->clavePersonalizado($subject, $bodyTpl, $emails, $forzar),
+            $envios->clavePersonalizado($subject, $bodyTpl, $emails),
+            $forzar,
             $emails,
             ['asunto' => $subject, 'cuerpo' => $bodyTpl],
             optional($request->user())->id
         );
 
-        if (! $creado) {
+        if ($resultado === EnviosMasivosService::EN_CURSO) {
             return response()->json([
-                'status'  => 'duplicado',
-                'message' => 'Este mismo mail a estos mismos destinatarios ya fue enviado o se está enviando.',
-                'envio'   => $envio->resumen(),
+                'status'    => 'en_curso',
+                'resultado' => $resultado,
+                'message'   => 'Este mismo mail se está enviando o está pausado. Reanudalo o cancelalo antes de volver a enviar.',
+                'envio'     => $envio->resumen(),
+            ], 409);
+        }
+
+        if ($resultado === EnviosMasivosService::DUPLICADO) {
+            return response()->json([
+                'status'    => 'duplicado',
+                'resultado' => $resultado,
+                'message'   => 'Este mismo mail a estos mismos destinatarios ya fue enviado.',
+                'envio'     => $envio->resumen(),
             ], 409);
         }
 
@@ -55,5 +67,21 @@ class AdminMailController extends Controller
         $envio = EnvioMasivo::findOrFail($id);
 
         return response()->json(['envio' => $envio->resumen()]);
+    }
+
+    /**
+     * Pausar / reanudar / cancelar un envío masivo.
+     */
+    public function accionEnvio(int $id, string $accion, EnviosMasivosService $envios): JsonResponse
+    {
+        $envio = EnvioMasivo::findOrFail($id);
+
+        if ($envio->finalizado_at !== null && $accion !== 'reanudar') {
+            return response()->json(['message' => 'El envío ya terminó.', 'envio' => $envio->resumen()], 409);
+        }
+
+        $envios->cambiarEstado($envio, $accion);
+
+        return response()->json(['envio' => $envio->fresh()->resumen()]);
     }
 }

@@ -58,6 +58,8 @@ class Kernel extends HttpKernel
         // Acceso a la mensajería interna. Se valida en cada request y no en el
         // login: las sesiones de esta app no expiran solas.
         'mensajeria' => \App\Http\Middleware\EnsureUserIsMensajeriaMiembro::class,
+        // Habilidades de token Sanctum (ej. `abilities:mcp:read`).
+        'abilities' => \Laravel\Sanctum\Http\Middleware\CheckAbilities::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,
         'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,

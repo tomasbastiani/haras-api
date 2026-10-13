@@ -4,6 +4,7 @@ namespace App\Providers;
 
 // use Illuminate\Support\Facades\Gate;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 
 class AuthServiceProvider extends ServiceProvider
 {
@@ -25,6 +26,18 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        //
+        // Un token con habilidades acotadas (hoy sólo el del MCP, `mcp:read`)
+        // vale únicamente en /admin/mcp/*. Sin esto Sanctum lo aceptaría en
+        // cualquier ruta que no chequee habilidades, que son casi todas: un
+        // token filtrado de la config de Claude Desktop serviría para borrar
+        // períodos de expensas o mandar mails masivos. Los tokens de login
+        // (`spa`) tienen '*' y no se ven afectados.
+        Sanctum::authenticateAccessTokensUsing(function ($token, bool $isValid) {
+            if (! $isValid || $token->can('*')) {
+                return $isValid;
+            }
+
+            return request()->is('api/admin/mcp/*');
+        });
     }
 }

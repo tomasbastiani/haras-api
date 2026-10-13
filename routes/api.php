@@ -20,6 +20,8 @@ use App\Http\Controllers\MensajeriaController;
 use App\Http\Controllers\CanalController;
 use App\Http\Controllers\MensajeController;
 use App\Http\Controllers\MensajeriaMiembroController;
+use App\Http\Controllers\McpAdminController;
+use App\Http\Controllers\McpTokenController;
 
 /*
 |--------------------------------------------------------------------------
@@ -255,6 +257,27 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/turnero/mis-turnos', [TurneroController::class, 'misTurnos']);
 });
 Route::middleware(['auth:sanctum', 'admin'])->get('/turnero/admin/turnos', [TurneroController::class, 'adminTurnos']);
+
+// Servidor MCP del admin (Claude Desktop): consultas de SÓLO LECTURA. Las usa
+// un token aparte con la habilidad `mcp:read`, que Sanctum rechaza en cualquier
+// otra ruta (ver AuthServiceProvider). No agregar acá nada que escriba.
+Route::middleware(['auth:sanctum', 'admin', 'abilities:mcp:read', 'throttle:60,1'])
+    ->prefix('admin/mcp')->group(function () {
+        Route::get('/lotes/{nlote}', [McpAdminController::class, 'fichaLote']);
+        Route::get('/morosos', [McpAdminController::class, 'morosos']);
+        Route::get('/reclamos', [McpAdminController::class, 'reclamos']);
+        Route::get('/paquetes-pendientes', [McpAdminController::class, 'paquetesPendientes']);
+        Route::get('/envios', [McpAdminController::class, 'envios']);
+        Route::get('/guia/{seccion?}', [McpAdminController::class, 'guia']);
+    });
+
+// Alta/baja del token MCP desde la PWA (Asistente Claude). Fuera de /admin/mcp/* a
+// propósito: el token MCP no puede emitirse ni renovarse a sí mismo.
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin/mcp-token')->group(function () {
+    Route::get('/', [McpTokenController::class, 'estado']);
+    Route::post('/', [McpTokenController::class, 'emitir']);
+    Route::delete('/', [McpTokenController::class, 'revocar']);
+});
 
 // Limitar un poco el spam en forgot
 Route::middleware('throttle:5,1')->group(function () {
